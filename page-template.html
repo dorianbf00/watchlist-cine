@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Watchlist au ciné</title>
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#030303" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ciné">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23e2ff46'/><text x='50' y='72' font-family='Arial Black,sans-serif' font-weight='900' font-size='64' text-anchor='middle' fill='%236a6a6d'>W</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Inter:ital,wght@0,400;0,500;0,600;1,600&display=swap" rel="stylesheet">
+<style>
+/* Palette reprise du Rétro Projecteur */
+:root {
+  --bg: #ffffff; --ink: #030303; --gray: #6a6a6d; --gray-t: #6a6a6d99;
+  --green: #e2ff46; --green-pale: #e2ff4666; --blue: #ccdaff; --blue-pale: #ccdaff50; --red: #ff4d4d;
+  --line: #6a6a6d; --hair: #d9d9db; --on-green: #6a6a6d;
+  --display: "Archivo", "Arial Black", sans-serif; --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #030303; --ink: #f4f4f2; --gray: #a5a5a8; --gray-t: #a5a5a899; --line: #6a6a6d; --hair: #29292b; --green-pale: #e2ff461f; --blue-pale: #ccdaff1f; }
+}
+:root[data-theme="dark"] { --bg: #030303; --ink: #f4f4f2; --gray: #a5a5a8; --gray-t: #a5a5a899; --line: #6a6a6d; --hair: #29292b; --green-pale: #e2ff461f; --blue-pale: #ccdaff1f; }
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 var(--sans); }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+.display { font-family: var(--display); font-weight: 900; font-stretch: 112%; text-transform: uppercase; letter-spacing: -.01em; }
+.up { text-transform: uppercase; }
+
+/* En-tête */
+.masthead { padding-top: calc(16px + env(safe-area-inset-top)); }
+.kicker { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; font-weight: 500; color: var(--gray); text-transform: uppercase; letter-spacing: .02em; padding-bottom: 10px; }
+.kicker a { text-decoration: none; border-bottom: 1px solid currentColor; }
+.title { background: var(--green); color: var(--on-green); text-align: center; margin: 0; padding: 8px 10px 4px;
+  font-size: clamp(34px, 11vw, 76px); line-height: 1; }
+.sub { text-align: center; color: var(--gray); font-size: 14px; font-weight: 500; text-transform: uppercase; margin: 10px 0 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+
+/* Barre jours + filtres (collante) */
+.bar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+.days { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 0 8px; }
+.day { border: 1px solid var(--line); background: transparent; padding: 7px 4px 6px; text-align: center; text-transform: uppercase; line-height: 1.15; }
+.day .dn { display: block; font-weight: 600; font-size: 13px; }
+.day .dd { display: block; font-size: 11px; color: var(--gray); }
+.day .dc { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 24px; color: var(--gray); margin-top: 3px; line-height: 1; }
+.day .dc small { font-family: var(--sans); font-weight: 600; font-size: 11px; font-stretch: 100%; }
+.day[aria-selected="true"] { background: var(--green); border-color: var(--green); color: #030303; }
+.day[aria-selected="true"] .dd, .day[aria-selected="true"] .dc { color: var(--on-green); }
+.filters { display: flex; gap: 8px; padding: 0 0 10px; overflow-x: auto; scrollbar-width: none; }
+.filters::-webkit-scrollbar { display: none; }
+.chip { flex: none; border: 1px solid var(--line); background: transparent; padding: 6px 12px; font-size: 13px; font-weight: 500; text-transform: uppercase; color: var(--gray); }
+.chip[aria-pressed="true"] { background: var(--green-pale); color: var(--ink); }
+
+/* En-têtes de colonnes comme le calendrier du site */
+.cols { display: none; }
+@media (min-width: 860px) {
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 16px; background: var(--green); color: var(--on-green); }
+  .cols span { padding: 6px 12px; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 15px; text-transform: uppercase; }
+  .cols span + span { border-left: 1px solid var(--line); }
+}
+
+/* Films */
+.list { padding: 12px 0 28px; }
+@media (min-width: 860px) { .list { padding-top: 0; } }
+.film { border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 78px 1fr; gap: 12px; padding: 12px 0; }
+.film:nth-child(odd) { background: var(--green-pale); }
+.film { padding-left: 10px; padding-right: 10px; }
+@media (min-width: 560px) { .film { grid-template-columns: 96px 1fr; } }
+@media (min-width: 860px) {
+  .film { grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr); gap: 0 14px; padding: 12px; }
+  .film .seances { border-left: 1px solid var(--line); padding-left: 12px; }
+}
+.poster { display: block; aspect-ratio: 2/3; overflow: hidden; background: var(--hair); position: relative; align-self: start; }
+.poster img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; display: block; }
+.poster .ph { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-weight: 900; font-size: 26px; color: var(--gray); }
+.badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.badge { font-size: 10.5px; font-weight: 600; text-transform: uppercase; padding: 1px 6px; border: 1px solid var(--line); color: var(--gray); background: var(--bg); }
+.badge.hot { background: var(--blue); border-color: var(--blue); color: #030303; }
+.film h2 { font-size: 16px; font-weight: 500; line-height: 1.25; margin: 0; }
+.film h2 a { text-decoration: none; }
+.film h2 i { font-style: italic; font-weight: 600; text-transform: uppercase; }
+.film h2 a:hover i { text-decoration: underline; }
+.orig { color: var(--gray); font-size: 13px; margin: 2px 0 0; }
+.meta { color: var(--gray); font-size: 12.5px; text-transform: uppercase; margin: 6px 0 0; }
+.th { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 8px 0; border-top: 1px dotted var(--gray-t); }
+@media (min-width: 860px) { .th:first-child { border-top: 0; padding-top: 0; } }
+@media (max-width: 859px) { .seances { grid-column: 1 / -1; margin-top: 4px; } }
+.th-name { background: none; border: 0; padding: 0; text-align: left; font-size: 14px; }
+.th-name:hover { text-decoration: underline; }
+.th-name sup { line-height: 0; }
+.times { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.t { border: 1px solid var(--line); background: var(--bg); padding: 4px 8px; font-weight: 500; font-variant-numeric: tabular-nums; font-size: 14px; min-height: 32px; }
+.t:hover { background: var(--green); border-color: var(--green); color: #030303; }
+.t.past { color: var(--gray-t); border-color: var(--gray-t); text-decoration: line-through; }
+.more { background: none; border: 0; padding: 6px 0 0; color: var(--gray); font-weight: 600; font-size: 12.5px; text-transform: uppercase; text-decoration: underline; }
+.film:not(.expanded) .th.extra { display: none; }
+.film.expanded .more { display: none; }
+.empty { text-align: center; color: var(--gray); padding: 48px 12px; }
+.empty b { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 28px; text-transform: uppercase; margin-bottom: 4px; }
+footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding: 0 0 calc(28px + env(safe-area-inset-bottom)); }
+
+/* Feuille d'actions */
+.scrim { position: fixed; inset: 0; background: #03030380; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--bg); border-top: 1px solid var(--line);
+  padding: 0 16px calc(14px + env(safe-area-inset-bottom)); transform: translateY(105%); transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+.sheet { visibility: hidden; }
+.open .sheet { visibility: visible; }
+.open .scrim { opacity: 1; pointer-events: auto; }
+.open .sheet { transform: none; }
+.sheet-head { background: var(--green); color: #030303; margin: 0 -16px 12px; padding: 12px 16px 10px; }
+.sheet h3 { margin: 0; font-size: 17px; font-weight: 500; }
+.sheet h3 i { font-weight: 600; text-transform: uppercase; }
+.sheet .when { margin: 3px 0 0; font-size: 13px; text-transform: uppercase; color: var(--on-green); font-weight: 500; }
+.acts { display: grid; gap: 8px; }
+.act { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); background: var(--bg); text-decoration: none; font-weight: 500; text-transform: uppercase; font-size: 14px; text-align: left; width: 100%; }
+.act:hover { background: var(--green-pale); }
+.act.primary { background: var(--blue); border-color: var(--blue); color: #030303; }
+.act svg { width: 18px; height: 18px; flex: none; }
+.close { margin-top: 8px; background: none; border: 0; width: 100%; padding: 10px; color: var(--gray); font-weight: 600; text-transform: uppercase; text-decoration: underline; }
+@media (min-width: 700px) {
+  .sheet { left: 50%; right: auto; bottom: auto; top: 50%; width: 420px; border: 1px solid var(--line); padding-bottom: 14px;
+    transform: translate(-50%, -46%); opacity: 0; pointer-events: none; transition: transform .2s, opacity .2s; }
+  .open .sheet { transform: translate(-50%, -50%); opacity: 1; pointer-events: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .sheet, .scrim { transition: none; } }
+</style>
+</head>
+<body>
+<header class="masthead wrap">
+  <div class="kicker"><span>Letterboxd</span><a href="https://leretroprojecteur.com/" target="_blank" rel="noopener">Séances : Rétro Projecteur</a></div>
+  <h1 class="title display">Watchlist</h1>
+  <p class="sub" id="sub"></p>
+</header>
+
+<div class="bar">
+  <div class="wrap">
+    <nav class="days" id="days" role="tablist" aria-label="Jour"></nav>
+    <div class="filters" id="filters" aria-label="Filtres">
+      <button class="chip" data-bank="all" aria-pressed="true">Partout</button>
+      <button class="chip" data-bank="rg" aria-pressed="false">Rive gauche</button>
+      <button class="chip" data-bank="rd" aria-pressed="false">Rive droite</button>
+      <button class="chip" id="classics" aria-pressed="false">Ressorties seulement</button>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="cols"><span>Films</span><span>Séances</span></div>
+  <div class="list" id="list"></div>
+</main>
+<footer class="wrap" id="foot"></footer>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title">
+  <div class="sheet-head"><h3 id="sh-title"></h3><p class="when" id="sh-when"></p></div>
+  <div class="acts">
+    <button class="act primary" id="sh-ics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16"/><path d="M16 3v4M8 3v4M3 10h18M12 14v4M10 16h4"/></svg>Ajouter à mon agenda</button>
+    <a class="act" id="sh-map" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Itinéraire</span></a>
+    <a class="act" id="sh-rp" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16v12H4zM8 6v12M16 6v12"/></svg>Fiche Rétro Projecteur</a>
+    <a class="act" id="sh-lb" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="3.2"/><circle cx="12" cy="12" r="3.2" opacity=".7"/><circle cx="18" cy="12" r="3.2" opacity=".45"/></svg>Fiche Letterboxd</a>
+  </div>
+  <button class="close" id="sh-close">Fermer</button>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = (n) => String(n).padStart(2, '0');
+const hm = (t) => { let h = Math.floor(t), m = Math.round((t - h) * 60); if (m === 60) { h++; m = 0; } return [h, m]; };
+const fmtTime = (t) => { const [h, m] = hm(t); return `${h}h${pad(m)}`; };
+const parseDay = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+const fr = (d, o) => d.toLocaleDateString('fr-FR', o);
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const thisYear = new Date().getFullYear();
+
+// "75005" -> 5<sup>e</sup>, "75001" -> 1<sup>er</sup>, "75116" -> 16<sup>e</sup>, banlieue -> code postal
+function arr(zip) {
+  if (!zip) return '';
+  const m = /^751(\d\d)$|^750(\d\d)$/.exec(zip);
+  if (!m) return esc(zip);
+  const n = Number(m[1] ? 16 : m[2]);
+  return n === 1 ? '1<sup>er</sup>' : `${n}<sup>e</sup>`;
+}
+
+const state = { day: null, bank: 'all', classics: false };
+const films = DATA.films || [];
+films.forEach((f) => { f.total = f.seances.reduce((n, s) => n + s.times.length, 0); });
+
+function isPast(iso, t) { const [h, m] = hm(t); const d = parseDay(iso); d.setHours(h, m); return d < new Date(); }
+
+function filmsFor(iso) {
+  return films.map((f) => ({ f, seances: f.seances.filter((s) => s.date === iso && (state.bank === 'all' || s.bank === state.bank)) }))
+    .filter(({ f, seances }) => seances.length && (!state.classics || (f.year && f.year <= thisYear - 2)))
+    .map((x) => { const up = x.seances.flatMap((s) => s.times.filter((t) => !isPast(iso, t))); x.next = up.length ? Math.min(...up) : 99; return x; })
+    .sort((a, b) => a.next - b.next);
+}
+
+function dayLabel(iso) {
+  const d = parseDay(iso), today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d - today) / 864e5);
+  return { name: diff === 0 ? "Aujourd'hui" : diff === 1 ? 'Demain' : fr(d, { weekday: 'long' }), date: fr(d, { weekday: diff <= 1 ? 'short' : undefined, day: 'numeric', month: 'short' }) };
+}
+
+function renderDays() {
+  $('#days').innerHTML = DATA.days.map((iso) => {
+    const { name, date } = dayLabel(iso), n = filmsFor(iso).length;
+    return `<button class="day" role="tab" data-day="${iso}" aria-selected="${iso === state.day}">
+      <span class="dn">${esc(name)}</span><span class="dd">${esc(date)}</span><span class="dc">${n}<small> film${n > 1 ? 's' : ''}</small></span></button>`;
+  }).join('');
+}
+
+function renderList() {
+  const list = filmsFor(state.day);
+  if (!list.length) {
+    $('#list').innerHTML = `<div class="empty"><b>Relâche</b>Aucun film de ta watchlist ce jour-là${state.bank !== 'all' || state.classics ? ' avec ces filtres' : ''}.</div>`;
+    return;
+  }
+  $('#list').innerHTML = list.map(({ f, seances }) => {
+    const badges = [];
+    if (f.total === 1) badges.push('<span class="badge hot">Séance unique</span>');
+    else if (f.total <= 3) badges.push('<span class="badge hot">Rare</span>');
+    badges.push(`<span class="badge">${f.year && f.year <= thisYear - 2 ? 'Ressortie' : 'Nouveauté'}</span>`);
+    const meta = [f.runtime ? `${f.runtime} min` : null, f.countries ? esc(f.countries.split(/,\s*/).slice(0, 2).join(', ') + (f.countries.split(',').length > 2 ? '…' : '')) : null, f.rating ? `★ ${f.rating.toFixed(1).replace('.', ',')}` : null].filter(Boolean).join(' · ');
+    const initials = esc((f.title || '?').split(/\s+/).slice(0, 2).map((w) => w[0]).join(''));
+    const nextOf = (s) => Math.min(...s.times.filter((t) => !isPast(s.date, t)), 99);
+    const sorted = [...seances].sort((a, b) => nextOf(a) - nextOf(b) || Math.min(...a.times) - Math.min(...b.times));
+    const MAX = 3, extra = sorted.length - MAX;
+    const ths = sorted.map((s, i) => `
+      <div class="th${i >= MAX ? ' extra' : ''}">
+        <button class="th-name" data-map="${esc(s.theater)}|${esc(s.zip)}">${esc(s.theater)} (${arr(s.zip)})</button>
+        <div class="times">${s.times.map((t) => `<button class="t${isPast(s.date, t) ? ' past' : ''}" data-film="${esc(f.id)}" data-th="${esc(s.theater)}" data-zip="${esc(s.zip)}" data-date="${s.date}" data-time="${t}">${fmtTime(t)}</button>`).join('')}</div>
+      </div>`).join('') + (extra > 0 ? `<button class="more">+ ${extra} autre${extra > 1 ? 's' : ''} salle${extra > 1 ? 's' : ''}</button>` : '');
+    return `<article class="film">
+      <a class="poster" href="https://letterboxd.com/film/${esc(f.slug)}/" target="_blank" rel="noopener" aria-label="${esc(f.title)} sur Letterboxd">
+        <span class="ph">${initials}</span>${f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+      </a>
+      <div>
+        <div class="badges">${badges.join('')}</div>
+        <h2><a href="https://leretroprojecteur.com/film/${esc(f.id)}" target="_blank" rel="noopener"><i>${esc(f.title)}</i>, ${esc(f.directors)} (${f.year || '?'})</a></h2>
+        ${f.original && f.original.toLowerCase() !== f.title.toLowerCase() ? `<p class="orig">${esc(f.original)}</p>` : ''}
+        ${meta ? `<p class="meta">${meta}</p>` : ''}
+      </div>
+      <div class="seances">${ths}</div>
+    </article>`;
+  }).join('');
+}
+
+function render() { renderDays(); renderList(); }
+
+const mapUrl = (name, zip) => {
+  const q = encodeURIComponent(`${name} cinéma ${zip || ''} Paris`);
+  return isIOS ? `https://maps.apple.com/?q=${q}` : `https://www.google.com/maps/search/?api=1&query=${q}`;
+};
+
+let current = null;
+function openSheet(btn) {
+  const f = films.find((x) => x.id === btn.dataset.film), t = Number(btn.dataset.time);
+  current = { f, t, date: btn.dataset.date, th: btn.dataset.th, zip: btn.dataset.zip };
+  $('#sh-title').innerHTML = `<i>${esc(f.title)}</i>, ${esc(f.directors)} (${f.year || '?'})`;
+  $('#sh-when').innerHTML = `${esc(fr(parseDay(current.date), { weekday: 'long', day: 'numeric', month: 'long' }))} · ${fmtTime(t)} · ${esc(current.th)} (${arr(current.zip)})`;
+  $('#sh-map').href = mapUrl(current.th, current.zip);
+  $('#sh-map span').textContent = `Itinéraire vers ${current.th}`;
+  $('#sh-rp').href = `https://leretroprojecteur.com/film/${f.id}`;
+  $('#sh-lb').href = `https://letterboxd.com/film/${f.slug}/`;
+  document.body.classList.add('open');
+}
+function closeSheet() { document.body.classList.remove('open'); }
+
+function downloadIcs() {
+  const { f, t, date, th, zip } = current;
+  const [h, m] = hm(t);
+  const start = parseDay(date); start.setHours(h, m);
+  const end = new Date(start.getTime() + ((f.runtime || 120) + 20) * 6e4);
+  const stamp = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const txt = (s) => String(s).replace(/[,;\\]/g, (c) => '\\' + c);
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//watchlist-cine//FR', 'BEGIN:VEVENT',
+    `UID:${f.id}-${stamp(start)}@watchlist-cine`, `DTSTAMP:${stamp(new Date())}`,
+    `DTSTART;TZID=Europe/Paris:${stamp(start)}`, `DTEND;TZID=Europe/Paris:${stamp(end)}`,
+    `SUMMARY:🎬 ${txt(f.title)}`, `LOCATION:${txt(th)}${zip ? ' ' + zip : ''} Paris`,
+    `DESCRIPTION:${txt(f.directors || '')} (${f.year || ''})\\nhttps://leretroprojecteur.com/film/${f.id}`,
+    'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Séance dans 1h', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+  a.download = `${f.id}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+document.addEventListener('click', (e) => {
+  const day = e.target.closest('.day');
+  if (day) { state.day = day.dataset.day; try { sessionStorage.setItem('day', state.day); } catch {} render(); window.scrollTo({ top: Math.min(scrollY, $('.bar').offsetTop), behavior: 'smooth' }); return; }
+  const bank = e.target.closest('[data-bank]');
+  if (bank) { state.bank = bank.dataset.bank; document.querySelectorAll('[data-bank]').forEach((b) => b.setAttribute('aria-pressed', b === bank)); render(); return; }
+  if (e.target.closest('#classics')) { state.classics = !state.classics; $('#classics').setAttribute('aria-pressed', state.classics); render(); return; }
+  const th = e.target.closest('.th-name');
+  if (th) { const [n, z] = th.dataset.map.split('|'); window.open(mapUrl(n, z), '_blank', 'noopener'); return; }
+  const more = e.target.closest('.more');
+  if (more) { more.closest('.film').classList.add('expanded'); return; }
+  const t = e.target.closest('.t');
+  if (t) { openSheet(t); return; }
+  if (e.target.closest('#scrim, #sh-close')) closeSheet();
+  if (e.target.closest('#sh-ics')) downloadIcs();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+
+const gen = new Date(DATA.generated);
+$('#sub').textContent = `${films.length} film${films.length > 1 ? 's' : ''} à l'affiche · du ${fr(parseDay(DATA.days[0]), { day: 'numeric', month: 'long' })} au ${fr(parseDay(DATA.days.at(-1)), { day: 'numeric', month: 'long' })}`;
+$('#foot').textContent = `Mis à jour le ${fr(gen, { weekday: 'long', day: 'numeric', month: 'long' })} à ${pad(gen.getHours())}h${pad(gen.getMinutes())} · ${DATA.watchlistCount} films dans la watchlist de ${DATA.user}`;
+const todayIso = (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; })();
+let saved = null; try { saved = sessionStorage.getItem('day'); } catch {}
+state.day = DATA.days.includes(saved) ? saved : DATA.days.includes(todayIso) ? todayIso : DATA.days[0];
+render();
+</script>
+</body>
+</html>
