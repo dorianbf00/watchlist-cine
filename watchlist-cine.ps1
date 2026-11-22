@@ -23,12 +23,15 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36'
 
+# Téléchargement d'une page en UTF-8. On passe par curl (présent sur Windows 10+ et sur les serveurs GitHub) :
+# l'anti-robot de Letterboxd (Cloudflare) bloque parfois le client HTTP de PowerShell, mais pas curl.
+$Curl = if ($env:OS -eq 'Windows_NT') { 'curl.exe' } else { 'curl' }
+$TmpFile = [IO.Path]::GetTempFileName()
 function Get-Utf8([string]$Url) {
-  $r = Invoke-WebRequest -Uri $Url -UserAgent $UA -UseBasicParsing -TimeoutSec 30
-  $ms = New-Object IO.MemoryStream
-  $r.RawContentStream.Position = 0
-  $r.RawContentStream.CopyTo($ms)
-  [Text.Encoding]::UTF8.GetString($ms.ToArray())
+  $code = & $Curl -s -L --compressed --max-time 30 -A $UA -H 'Accept-Language: fr-FR,fr;q=0.9,en;q=0.8' -o $TmpFile -w '%{http_code}' $Url
+  $body = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($TmpFile))
+  if ("$code" -ne '200' -or $body -match '<title>Just a moment') { throw "HTTP $code $Url" }
+  $body
 }
 
 function Normalize([string]$s) {
@@ -240,7 +243,7 @@ function Test-SameDirector([string]$rpDirectors, [string[]]$lbDirectors) {
 }
 # Vrai "page introuvable" (404), par opposition à une erreur réseau ou un blocage temporaire
 function Test-NotFound($err) {
-  try { return ([int]$err.Exception.Response.StatusCode -eq 404) } catch { return $false }
+  return ("$err" -match '^HTTP 404 ')
 }
 function Find-LbFilm($f, $tmdbId) {
   # 1) Identifiant TMDB donné par le Rétro Projecteur -> Letterboxd redirige vers la bonne fiche (le plus fiable)
@@ -359,6 +362,209 @@ foreach ($key in @($others.Keys)) {
 $cache.GetEnumerator() | ForEach-Object -Begin { $o = [ordered]@{} } -Process { $o[$_.Key] = $_.Value } -End {
   [IO.File]::WriteAllText($cachePath, ($o | ConvertTo-Json -Depth 4 -Compress), (New-Object Text.UTF8Encoding($false))) }
 Write-Host "Fiches Letterboxd recherchées : $looked (cache : $($cache.Count))"
+
+
+# --- 3c. Tes goûts Letterboxd : films vus, notes, et note prévue pour les autres films -------
+# 1) Tes films vus avec ta note (en étoiles) et tes coups de cœur.
+#    Base : taste-data.json, créé par import-letterboxd.ps1 depuis l'export officiel Letterboxd
+#    (les pages qui listent tous tes films sont bloquées par l'anti-robot de Letterboxd).
+#    Complément à chaque passage : tes 72 derniers films vus + ton flux RSS (nouvelles notes).
+$tastePath = Join-Path (Split-Path $cachePath -Parent) 'taste-data.json'
+$tasteData = $null
+if (Test-Path $tastePath) { try { $tasteData = Get-Content $tastePath -Raw -Encoding UTF8 | ConvertFrom-Json } catch {} }
+$seenFilms = @{}
+if ($tasteData -and $tasteData.films) {
+  $tasteData.films.PSObject.Properties | ForEach-Object { $seenFilms[$_.Name] = [pscustomobject]@{ r = $_.Value.r; liked = [bool]$_.Value.liked } }
+}
+$fromExport = $seenFilms.Count
+try {
+  $html = Get-Utf8 "https://letterboxd.com/$User/films/"
+  foreach ($it in (($html -split '<li class="griditem') | Select-Object -Skip 1)) {
+    if ($it -notmatch 'data-item-slug="([^"]+)"') { continue }
+    $slug = $Matches[1]
+    $r = if ($it -match 'rated-(\d+)') { [int]$Matches[1] / 2 } else { $null }
+    $old = $seenFilms[$slug]
+    $seenFilms[$slug] = [pscustomobject]@{ r = if ($r) { $r } elseif ($old) { $old.r } else { $null }; liked = ($it -match 'icon-liked') -or ($old -and $old.liked) }
+  }
+} catch { Write-Host "Derniers films vus indisponibles : $_" }
+try {
+  $rss = Get-Utf8 "https://letterboxd.com/$User/rss/"
+  foreach ($item in (($rss -split '<item>') | Select-Object -Skip 1)) {
+    if ($item -notmatch '<link>https://letterboxd\.com/[^/]+/film/([^/<]+)/') { continue }
+    $slug = $Matches[1]
+    $r = if ($item -match '<letterboxd:memberRating>([0-9.]+)<') { [double]$Matches[1] } else { $null }
+    $liked = $item -match '<letterboxd:memberLike>Yes<'
+    $old = $seenFilms[$slug]
+    $seenFilms[$slug] = [pscustomobject]@{ r = if ($r) { $r } elseif ($old) { $old.r } else { $null }; liked = $liked -or ($old -and $old.liked) }
+  }
+} catch { Write-Host "Flux RSS indisponible : $_" }
+# On mémorise (le cache GitHub garde ainsi tes nouvelles notes d'un passage à l'autre)
+$fo = [ordered]@{}; foreach ($k in ($seenFilms.Keys | Sort-Object)) { $fo[$k] = $seenFilms[$k] }
+$boxdMap = if ($tasteData -and $tasteData.boxd) { $tasteData.boxd } else { [ordered]@{} }
+[IO.File]::WriteAllText($tastePath, ([ordered]@{ updated = (Get-Date).ToString('yyyy-MM-dd'); films = $fo; boxd = $boxdMap } | ConvertTo-Json -Depth 4 -Compress), (New-Object Text.UTF8Encoding($false)))
+Write-Host "Films vus : $($seenFilms.Count) (dont $fromExport depuis l'export ; notés : $(@($seenFilms.Values | Where-Object { $_.r }).Count))"
+
+# 2) Caractéristiques d'un film Letterboxd (cache permanent : une fiche ne change quasiment pas)
+$featPath = Join-Path (Split-Path $cachePath -Parent) 'lb-films.json'
+$feats = @{}
+if (Test-Path $featPath) {
+  try { (Get-Content $featPath -Raw -Encoding UTF8 | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $feats[$_.Name] = $_.Value } } catch {}
+}
+function Get-LbFeatures([string]$slug) {
+  if ($feats.ContainsKey($slug)) { return $feats[$slug] }
+  try { $p = Get-Utf8 "https://letterboxd.com/film/$slug/" } catch { return $null }
+  $o = [ordered]@{ y = 0; avg = $null; g = @(); t = @(); c = @(); d = @(); a = @() }
+  if ($p -match 'og:title" content="[^"]*\((\d{4})\)') { $o.y = [int]$Matches[1] }
+  if ($p -match '"ratingValue":([0-9.]+)') { $o.avg = [double]$Matches[1] }
+  if ($p -match '"genre":\[([^\]]*)\]') { $o.g = @([regex]::Matches($Matches[1], '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value }) }
+  if ($p -match '"countryOfOrigin":\[(.*?)\]') { $o.c = @([regex]::Matches($Matches[1], '"name":"([^"]+)"') | ForEach-Object { $_.Groups[1].Value }) }
+  if ($p -match '"director":\[(.*?)\]') { $o.d = @([regex]::Matches($Matches[1], '"name":"([^"]+)"') | ForEach-Object { [regex]::Unescape($_.Groups[1].Value) }) }
+  $o.t = @([regex]::Matches($p, 'href="/films/(?:theme|mini-theme)/[^"]+"[^>]*>([^<]+)</a>') | ForEach-Object { [Net.WebUtility]::HtmlDecode($_.Groups[1].Value.Trim()) } | Select-Object -Unique)
+  $o.a = @([regex]::Matches($p, 'href="/actor/([^/"]+)/"') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique -First 6)
+  $feats[$slug] = [pscustomobject]$o
+  Start-Sleep -Milliseconds 250
+  return $feats[$slug]
+}
+function Save-Feats {
+  $o = [ordered]@{}; foreach ($k in ($feats.Keys | Sort-Object)) { $o[$k] = $feats[$k] }
+  [IO.File]::WriteAllText($featPath, ($o | ConvertTo-Json -Depth 4 -Compress), (New-Object Text.UTF8Encoding($false)))
+}
+
+# 3) Profil : écart de ta note à ta note "attendue", par réalisateur / thème / genre / acteur / pays / décennie
+#    (moyenne "rétrécie" vers 0 : une affinité tirée d'un seul film pèse peu)
+$Groups = [ordered]@{
+  d = @{ w = 1.0;  k = 4.5; label = 'réal.' }
+  t = @{ w = 0.9;  k = 9;   label = 'thème' }
+  a = @{ w = 0.45; k = 6;   label = 'acteur' }
+  g = @{ w = 0.6;  k = 18;  label = 'genre' }
+  c = @{ w = 0.3;  k = 18;  label = 'pays' }
+  y = @{ w = 0.3;  k = 18;  label = 'décennie' }
+}
+if ($env:WC_GS) { foreach ($g in @($Groups.Keys)) { $Groups[$g].w *= [double]$env:WC_GS } }   # réglage (tests)
+if ($env:WC_KS) { foreach ($g in @($Groups.Keys)) { $Groups[$g].k *= [double]$env:WC_KS } }   # réglage (tests)
+
+function Get-FeatList($ft, [string]$g) {
+  if ($g -eq 'y') { if ($ft.y) { return @("$([math]::Floor($ft.y / 10) * 10)") } else { return @() } }
+  return @($ft.$g | Where-Object { $_ })
+}
+$rated = @()
+$missing = @($seenFilms.Keys | Where-Object { $seenFilms[$_].r -and -not $feats.ContainsKey($_) })
+if ($missing.Count) { Write-Host "Caractéristiques à récupérer pour tes films notés : $($missing.Count)" }
+$n = 0
+foreach ($slug in $seenFilms.Keys) {
+  $s = $seenFilms[$slug]; if (-not $s.r) { continue }
+  $ft = Get-LbFeatures $slug; if (-not $ft) { continue }
+  $stars = [double]$s.r + $(if ($s.liked) { 0.25 } else { 0 })
+  $rated += [pscustomobject]@{ slug = $slug; stars = $stars; ft = $ft }
+  if ((++$n % 100) -eq 0) { Save-Feats }
+}
+Save-Feats
+$mu = if ($rated) { ($rated | Measure-Object stars -Average).Average } else { 3 }
+$avgVals = @($rated | Where-Object { $_.ft.avg } | ForEach-Object { [double]$_.ft.avg })
+$muLb = if ($avgVals) { ($avgVals | Measure-Object -Average).Average } else { 3.5 }
+# Ta note "attendue" d'après la note moyenne Letterboxd, ajustée à ta façon de noter (régression linéaire).
+# Les affinités ne mesurent ensuite que l'écart à cette attente : ce que tu aimes PLUS ou MOINS que les autres.
+$regA = $mu; $regB = 0.0
+$withAvg = @($rated | Where-Object { $_.ft.avg })
+if ($withAvg.Count -ge 30) {
+  $mx = ($withAvg | ForEach-Object { [double]$_.ft.avg } | Measure-Object -Average).Average
+  $my = ($withAvg | Measure-Object stars -Average).Average
+  $sxy = 0.0; $sxx = 0.0
+  foreach ($x in $withAvg) { $dx = [double]$x.ft.avg - $mx; $sxy += $dx * ($x.stars - $my); $sxx += $dx * $dx }
+  if ($sxx -gt 0) { $regB = $sxy / $sxx; $regA = $my - $regB * $mx }
+}
+function Get-Base($ft) { if ($ft.avg) { $regA + $regB * [double]$ft.avg } else { $mu } }
+
+# Ajoute (sign = 1) ou retire (sign = -1) un film du profil
+function Update-Profile($prof, $x, [int]$sign) {
+  $dev = $x.stars - (Get-Base $x.ft)
+  foreach ($g in $Groups.Keys) {
+    foreach ($v in (Get-FeatList $x.ft $g)) {
+      if (-not $prof[$g].ContainsKey($v)) { $prof[$g][$v] = @(0.0, 0, 0.0) }
+      $prof[$g][$v][0] += $sign * $dev; $prof[$g][$v][1] += $sign; $prof[$g][$v][2] += $sign * $x.stars
+      if ($prof[$g][$v][1] -le 0) { $prof[$g].Remove($v) }
+    }
+  }
+}
+function New-Profile($films) {
+  $prof = @{}
+  foreach ($g in $Groups.Keys) { $prof[$g] = @{} }
+  foreach ($x in $films) { Update-Profile $prof $x 1 }
+  $prof
+}
+# Note prévue + meilleure raison ("Dario Argento : 4 films vus, ★4,3")
+function Get-Prediction($ft, $prof) {
+  $pred = Get-Base $ft; $best = $null; $bestC = 0
+  foreach ($g in $Groups.Keys) {
+    $vals = Get-FeatList $ft $g; if (-not $vals) { continue }
+    $sum = 0.0
+    foreach ($v in $vals) {
+      $e = $prof[$g][$v]
+      if (-not $e) { continue }
+      $aff = $e[0] / ($e[1] + $Groups[$g].k)
+      $sum += $aff
+      $contrib = $Groups[$g].w * $aff / $vals.Count
+      # Explication : seulement réalisateur / thème / genre / acteur (pays et décennie sont trop vagues)
+      if ($g -in 'd', 't', 'g', 'a' -and $contrib -gt $bestC -and $e[1] -ge $(if ($g -eq 'd') { 1 } else { 2 })) {
+        $bestC = $contrib
+        $best = [pscustomobject]@{ g = $g; v = $v; n = $e[1]; avg = [math]::Round($e[2] / $e[1], 1) }
+      }
+    }
+    $pred += $Groups[$g].w * $sum / $vals.Count
+  }
+  # Qualité (note Letterboxd) : donnée en raison si elle tire nettement le score vers le haut
+  $q = if ($ft.avg -and ((Get-Base $ft) - $mu) -gt 0.15) { [math]::Round([double]$ft.avg, 1) } else { $null }
+  [pscustomobject]@{ stars = [math]::Max(0.5, [math]::Min(5.0, [double]$pred)); why = $best; q = $q }
+}
+$taste = New-Profile $rated
+
+# 4) Fiabilité : on cache chaque note une à une (sur un échantillon), on la prédit, on compare
+if ($rated.Count -ge 50 -and $env:WC_EVAL) {
+  $sample = $rated | Get-Random -Count ([math]::Min(250, $rated.Count)) -SetSeed 42
+  $errs = @(); $pairs = @()
+  foreach ($x in $sample) {
+    Update-Profile $taste $x -1
+    $p = Get-Prediction $x.ft $taste
+    Update-Profile $taste $x 1
+    $errs += [math]::Abs($p.stars - $x.stars); $pairs += , @($p.stars, $x.stars)
+  }
+  $mx = ($pairs | ForEach-Object { $_[0] } | Measure-Object -Average).Average; $my = ($pairs | ForEach-Object { $_[1] } | Measure-Object -Average).Average
+  $cov = 0; $vx = 0; $vy = 0; foreach ($q in $pairs) { $cov += ($q[0] - $mx) * ($q[1] - $my); $vx += ($q[0] - $mx) * ($q[0] - $mx); $vy += ($q[1] - $my) * ($q[1] - $my) }
+  $baseline = ($sample | ForEach-Object { [math]::Abs($mu - $_.stars) } | Measure-Object -Average).Average
+  Write-Host ("Évaluation : écart moyen {0:N2}★ (sans algo : {1:N2}★), corrélation {2:N2}" -f ($errs | Measure-Object -Average).Average, $baseline, ($cov / [math]::Sqrt($vx * $vy)))
+  if ($env:WC_EVALONLY) { exit }
+}
+
+# 5) Application aux films hors watchlist
+$scored = 0
+foreach ($f in $others.Values) {
+  $f.seen = $null; $f.match = $null; $f.why = $null
+  if (-not $f.slug) { continue }
+  if ($seenFilms.ContainsKey($f.slug)) {
+    $s = $seenFilms[$f.slug]
+    $f.seen = [ordered]@{ r = if ($s.r) { [double]$s.r } else { $null }; liked = [bool]$s.liked }
+    continue
+  }
+  $ft = Get-LbFeatures $f.slug; if (-not $ft) { continue }
+  $p = Get-Prediction $ft $taste
+  $f.match = [int][math]::Round([math]::Max(1, [math]::Min(99, ($p.stars - 1) / 4 * 100)))
+  $f.pred = [math]::Round($p.stars, 1)
+  $fr = [Globalization.CultureInfo]'fr-FR'
+  $parts = @()
+  if ($p.q) { $parts += "Très bien noté sur Letterboxd (★$($p.q.ToString('0.0', $fr)))" }
+  if ($p.why) {
+    $lab = switch ($p.why.g) {
+      'd' { $p.why.v }
+      'a' { "avec " + ($fr.TextInfo.ToTitleCase(($p.why.v -replace '-', ' '))) }
+      default { $p.why.v }
+    }
+    $parts += "$lab : $($p.why.n) film$(if ($p.why.n -gt 1) { 's' }) vu$(if ($p.why.n -gt 1) { 's' }), ★$($p.why.avg.ToString('0.0', $fr)) en moyenne"
+  }
+  if ($parts) { $f.why = $parts -join ' · ' }
+  $scored++
+}
+Save-Feats
+Write-Host "Autres films : $(@($others.Values | Where-Object { $_.seen }).Count) déjà vus, $scored avec une note prévue (ta moyenne : ★$([math]::Round($mu, 2)))"
 
 # --- 3b. Films de la watchlist : affiche, note, durée + vérification du réalisateur ----
 $rejected = @()

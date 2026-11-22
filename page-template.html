@@ -137,6 +137,20 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
 .tile .tt { font-size: 12px; font-weight: 600; font-style: italic; text-transform: uppercase; line-height: 1.2;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tile .ty { font-size: 11px; color: var(--gray); margin-top: -2px; }
+/* Groupes "Déjà vus / Pour toi / Le reste" et badges sur les affiches */
+.ogroup { margin-top: 18px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.ogroup h3 { margin: 0; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 18px; text-transform: uppercase; color: var(--gray); }
+.ogroup h3 span { font-family: var(--sans); font-size: 12px; font-weight: 600; background: var(--hair); color: var(--ink); padding: 1px 7px; vertical-align: 3px; margin-left: 4px; }
+.ogroup p { margin: 2px 0 0; font-size: 12px; color: var(--gray); text-transform: uppercase; }
+.ogroup + .pgrid { padding-top: 10px; }
+.pbadge { position: absolute; z-index: 2; left: 4px; top: 4px; font-size: 10.5px; font-weight: 700; padding: 2px 5px; text-transform: uppercase;
+  font-variant-numeric: tabular-nums; box-shadow: 0 1px 3px #0004; letter-spacing: .02em; }
+.pbadge.seen { background: #e2ff46; color: #030303; }
+.pbadge.match { background: #fff; color: #030303; border: 1px solid #6a6a6d; }
+.pbadge.match.hot { background: #ccdaff; border-color: #ccdaff; }
+.detail .taste { margin: 6px 0 0; font-size: 13px; }
+.detail .taste b { font-weight: 700; }
+.detail .taste.seen b { background: #e2ff46; color: #030303; padding: 0 4px; }
 .detail { grid-column: 1 / -1; background: var(--blue-pale); border: 1px solid var(--line); padding: 12px; }
 .detail-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
 .detail h3 { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.25; }
@@ -304,14 +318,35 @@ function renderList() {
   // Ordre : ressorties d'abord (par année, comme le calendrier du Rétro Projecteur), puis nouveautés.
   // Masquable avec le filtre "Hors watchlist".
   if (!state.showOthers) { othersShown = []; $('#others').innerHTML = ''; return; }
-  othersShown = filmsFor(state.day, others).filter((x) => x.next !== 99)
-    .sort((a, b) => (a.f.year || 9999) - (b.f.year || 9999) || a.f.title.localeCompare(b.f.title, 'fr'));
+  // Tri "pour toi" : 1) déjà vus, par ta note ; 2) pas vus, du plus au moins probable de te plaire ;
+  // 3) films sans fiche Letterboxd (impossible à évaluer), par année.
+  const groupOf = (f) => (f.seen ? 0 : f.match != null ? 1 : 2);
+  const seenScore = (f) => (f.seen.r ?? 0) + (f.seen.liked ? 0.1 : 0);
+  othersShown = filmsFor(state.day, others).filter((x) => x.next !== 99).sort((a, b) => {
+    const ga = groupOf(a.f), gb = groupOf(b.f);
+    if (ga !== gb) return ga - gb;
+    if (ga === 0) return seenScore(b.f) - seenScore(a.f);
+    if (ga === 1) return b.f.match - a.f.match;
+    return (a.f.year || 9999) - (b.f.year || 9999) || a.f.title.localeCompare(b.f.title, 'fr');
+  });
   const n = othersShown.length;
+  const groups = [
+    { g: 0, title: 'Déjà vus', sub: 'triés par ta note' },
+    { g: 1, title: 'Pour toi', sub: 'du plus probable au moins probable de te plaire, d’après tes notes Letterboxd' },
+    { g: 2, title: 'Le reste', sub: 'pas de fiche Letterboxd pour les évaluer' },
+  ];
   $('#others').innerHTML = n ? `
     <div class="others-head"><h2 class="display">Aussi à l'affiche</h2>
-      <p>${n} autre${n > 1 ? 's' : ''} film${n > 1 ? 's' : ''} hors de ta watchlist · touche une affiche pour voir les séances</p></div>
-    <div class="pgrid" id="pgrid">${othersShown.map(tile).join('')}</div>` : '';
+      <p>${n} autre${n > 1 ? 's' : ''} film${n > 1 ? 's' : ''} hors de ta watchlist · trié pour toi · touche une affiche pour voir les séances</p></div>
+    ${groups.map(({ g, title, sub }) => {
+      const items = othersShown.map((x, i) => ({ x, i })).filter(({ x }) => groupOf(x.f) === g);
+      return items.length ? `<div class="ogroup"><h3>${title} <span>${items.length}</span></h3><p>${sub}</p></div>
+        <div class="pgrid">${items.map(({ x, i }) => tile(x, i)).join('')}</div>` : '';
+    }).join('')}` : '';
 }
+
+// ★ en demi-étoiles : 4.5 -> "★4½"
+const starTxt = (r) => r == null ? '' : `★${Math.floor(r)}${r % 1 ? '½' : ''}`;
 
 const lbUrl = (f) => f.slug ? `https://letterboxd.com/film/${esc(f.slug)}/` : `https://letterboxd.com/search/films/${encodeURIComponent(f.original || f.title)}/`;
 const metaOf = (f) => [f.runtime ? `${f.runtime} min` : null,
@@ -352,26 +387,38 @@ function card({ f, seances }) {
 }
 
 // Vignette d'affiche (section "Aussi à l'affiche")
+// Badge sur l'affiche : "VU ★4½" (déjà vu) ou "87 %" (probabilité que ça te plaise)
+function badgeOf(f) {
+  if (f.seen) return `<span class="pbadge seen">Vu${f.seen.r != null ? ' ' + starTxt(f.seen.r) : ''}${f.seen.liked ? ' ♥' : ''}</span>`;
+  if (f.match != null) return `<span class="pbadge match${f.match >= 75 ? ' hot' : ''}">${f.match} %</span>`;
+  return '';
+}
+
 function tile({ f }, i) {
   return `<button class="tile" data-i="${i}" aria-expanded="false">
-    <span class="poster"><span class="ph ph-title"><span class="pt-band">${f.year || ''}</span><span class="pt-name">${esc(f.title)}</span><span class="pt-dir">${esc(f.directors || '')}</span></span>${posterImg(f)}</span>
+    <span class="poster"><span class="ph ph-title"><span class="pt-band">${f.year || ''}</span><span class="pt-name">${esc(f.title)}</span><span class="pt-dir">${esc(f.directors || '')}</span></span>${posterImg(f)}${badgeOf(f)}</span>
     <span class="tt">${esc(f.title)}</span><span class="ty">${f.year || ''}</span>
   </button>`;
 }
 
-// Déplie, sous la rangée de l'affiche touchée, le détail du film : salles et horaires
+// Déplie, sous la rangée de l'affiche touchée, le détail du film : pourquoi ce score, salles et horaires
 function toggleDetail(tileEl) {
-  const grid = $('#pgrid');
   const wasOpen = tileEl.getAttribute('aria-expanded') === 'true';
-  grid.querySelector('.detail')?.remove();
-  grid.querySelectorAll('.tile[aria-expanded="true"]').forEach((t) => t.setAttribute('aria-expanded', 'false'));
+  document.querySelectorAll('#others .detail').forEach((d) => d.remove());
+  document.querySelectorAll('#others .tile[aria-expanded="true"]').forEach((t) => t.setAttribute('aria-expanded', 'false'));
   if (wasOpen) return;
+  const grid = tileEl.closest('.pgrid');
   const tiles = [...grid.querySelectorAll('.tile')];
   const i = tiles.indexOf(tileEl);
   const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
   const last = Math.min(Math.floor(i / cols) * cols + cols - 1, tiles.length - 1);
   const { f, seances } = othersShown[Number(tileEl.dataset.i)];
   const meta = metaOf(f);
+  const taste = f.seen
+    ? `<p class="taste seen">Tu l'as déjà vu${f.seen.r != null ? ` · ta note : <b>${starTxt(f.seen.r)}</b>` : ''}${f.seen.liked ? ' · ♥ coup de cœur' : ''}</p>`
+    : f.match != null
+      ? `<p class="taste"><b>${f.match} % pour toi</b> (≈ ${String(f.pred).replace('.', ',')}★)${f.why ? ` · ${esc(f.why)}` : ''}</p>`
+      : '';
   const d = document.createElement('div');
   d.className = 'detail';
   d.innerHTML = `
@@ -379,6 +426,7 @@ function toggleDetail(tileEl) {
       <h3><a href="https://leretroprojecteur.com/film/${esc(f.id)}" target="_blank" rel="noopener"><i>${esc(f.title)}</i>, ${esc(f.directors)} (${f.year || '?'})</a></h3>
       <button class="detail-close" aria-label="Fermer">✕</button>
     </div>
+    ${taste}
     <p class="meta">${meta ? meta + ' · ' : ''}<a href="${lbUrl(f)}" target="_blank" rel="noopener">Letterboxd ↗</a></p>
     <div class="seances">${theatersHtml(f, seances, 99)}</div>`;
   tiles[last].after(d);
@@ -405,7 +453,7 @@ function animateIn() {
   // Affiches déjà en cache : afficher sans attendre l'événement load
   document.querySelectorAll('.poster img').forEach((img) => { if (img.complete && img.naturalWidth) img.classList.add('ok'); });
   if (calm.matches || !revealIO) return;
-  document.querySelectorAll('.film, .tile, .empty, .others-head').forEach((el) => { el.classList.add('reveal'); revealIO.observe(el); });
+  document.querySelectorAll('.film, .tile, .empty, .others-head, .ogroup').forEach((el) => { el.classList.add('reveal'); revealIO.observe(el); });
 }
 
 function render() { renderDays(); renderList(); animateIn(); }
