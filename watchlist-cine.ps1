@@ -62,9 +62,16 @@ Write-Host "Watchlist : $($watch.Count) films"
 
 # --- 2. Séances Rétro Projecteur -----------------------------------------
 # Salles retenues : Paris intra-muros (75xxx) ET carte UGC Illimité acceptée
-$ugcList = @{}
+$ugcList = @{}   # nom normalisé -> adresse (ou '' si inconnue)
 Get-Content (Join-Path $ScriptDir 'cinemas-ugc.txt') -Encoding UTF8 | ForEach-Object { $_.Trim() } |
-  Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object { $ugcList[(Normalize $_)] = $true }
+  Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object {
+    $parts = $_ -split '\|', 2
+    $ugcList[(Normalize $parts[0].Trim())] = if ($parts.Count -gt 1) { $parts[1].Trim() } else { '' }
+  }
+function Get-Address($th) {
+  $a = $ugcList[(Normalize $th.name)]
+  if ($a) { return $a } else { return "$($th.zipcode) Paris" }
+}
 function Test-Theater($th) {
   if ("$($th.zipcode)" -notmatch '^75\d{3}$') { return $false }
   $n = Normalize $th.name
@@ -99,7 +106,8 @@ for ($i = 0; $i -lt $Days; $i++) {
     foreach ($th in $theaters) {
       $times = [object[]]@($th.seances.PSObject.Properties | ForEach-Object { [double]$_.Value.time } | Sort-Object)
       [void]$results[$mv.id].seances.Add([ordered]@{
-        date = $iso; theater = $th.name; zip = $th.zipcode; bank = $th.neighborhood; times = $times })
+        date = $iso; theater = $th.name; zip = $th.zipcode; bank = $th.neighborhood
+        address = (Get-Address $th); times = $times; ics = $null })
     }
   }
 }
@@ -127,7 +135,58 @@ foreach ($f in $results.Values) {
   Start-Sleep -Milliseconds 300
 }
 
-# --- 4. Page HTML -----------------------------------------------------------
+# --- 4. Un fichier calendrier (.ics) par séance --------------------------------
+# Toucher une séance sur la page ouvre ce fichier : l'iPhone propose alors "Ajouter au calendrier".
+function Esc-Ics([string]$s) { ($s -replace '\\', '\\' -replace ';', '\;' -replace ',', '\,' -replace "`r?`n", '\n') }
+function Fold-Ics([string]$line) {
+  # Lignes de 75 octets max (norme iCalendar), coupées sans casser les caractères accentués
+  $out = New-Object Text.StringBuilder; $cur = ''
+  foreach ($ch in $line.ToCharArray()) {
+    if ([Text.Encoding]::UTF8.GetByteCount($cur + $ch) -gt 73) { [void]$out.Append($cur + "`r`n "); $cur = '' }
+    $cur += $ch
+  }
+  [void]$out.Append($cur); $out.ToString()
+}
+$icsDir = Join-Path $OutDir 'ics'
+if (Test-Path $icsDir) { Remove-Item $icsDir -Recurse -Force }
+New-Item -ItemType Directory -Force $icsDir | Out-Null
+$stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd'T'HHmmss'Z'")
+$vtz = @('BEGIN:VTIMEZONE', 'TZID:Europe/Paris',
+  'BEGIN:DAYLIGHT', 'TZOFFSETFROM:+0100', 'TZOFFSETTO:+0200', 'TZNAME:CEST', 'DTSTART:19700329T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU', 'END:DAYLIGHT',
+  'BEGIN:STANDARD', 'TZOFFSETFROM:+0200', 'TZOFFSETTO:+0100', 'TZNAME:CET', 'DTSTART:19701025T030000', 'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU', 'END:STANDARD',
+  'END:VTIMEZONE')
+foreach ($f in $results.Values) {
+  foreach ($s in $f.seances) {
+    $files = @()
+    foreach ($t in $s.times) {
+      $h = [math]::Floor($t); $m = [int][math]::Round(($t - $h) * 60); if ($m -eq 60) { $h++; $m = 0 }
+      $start = [datetime]::ParseExact($s.date, 'yyyy-MM-dd', $null).AddHours($h).AddMinutes($m)
+      $dur = if ($f.runtime) { $f.runtime } else { 120 }
+      $end = $start.AddMinutes($dur + 20)   # + ~20 min de pubs/bandes-annonces
+      $thSlug = (Normalize $s.theater)
+      $name = '{0}-{1}-{2:00}{3:00}-{4}.ics' -f $f.id, $s.date, $h, $m, $thSlug
+      $desc = "$($f.title) ($($f.year)) – $($f.directors)`n$dur min`nhttps://leretroprojecteur.com/film/$($f.id)`nhttps://letterboxd.com/film/$($f.slug)/"
+      $lines = @('BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//watchlist-cine//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH') + $vtz + @(
+        'BEGIN:VEVENT',
+        "UID:$($name -replace '\.ics$','')@watchlist-cine",
+        "DTSTAMP:$stamp",
+        "DTSTART;TZID=Europe/Paris:$($start.ToString("yyyyMMdd'T'HHmmss"))",
+        "DTEND;TZID=Europe/Paris:$($end.ToString("yyyyMMdd'T'HHmmss"))",
+        "SUMMARY:$(Esc-Ics "🎬 $($f.title)")",
+        "LOCATION:$(Esc-Ics "$($s.theater), $($s.address)")",
+        "DESCRIPTION:$(Esc-Ics $desc)",
+        "URL:https://leretroprojecteur.com/film/$($f.id)",
+        'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', "DESCRIPTION:$(Esc-Ics "$($f.title) dans 1h – $($s.theater)")", 'END:VALARM',
+        'END:VEVENT', 'END:VCALENDAR')
+      $ics = ($lines | ForEach-Object { Fold-Ics $_ }) -join "`r`n"
+      [IO.File]::WriteAllText((Join-Path $icsDir $name), $ics + "`r`n", (New-Object Text.UTF8Encoding($false)))
+      $files += $name
+    }
+    $s.ics = [object[]]$files
+  }
+}
+
+# --- 5. Page HTML -----------------------------------------------------------
 $data = [ordered]@{
   user = $User; generated = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
   days = $dayList; watchlistCount = $watch.Count
@@ -142,7 +201,7 @@ $films = @($results.Values)
 Write-Host "$($films.Count) film(s) trouvés -> $outFile"
 foreach ($f in $films) { Write-Host (" - {0} ({1})" -f $f.title, $f.year) }
 
-# --- 5. Notification téléphone (ntfy) ----------------------------------------
+# --- 6. Notification téléphone (ntfy) ----------------------------------------
 $names = ($films | Select-Object -First 5 | ForEach-Object { $_.title }) -join ' · '
 if ($films.Count -gt 5) { $names += ' …' }
 $notif = [ordered]@{

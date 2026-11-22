@@ -3,3 +3,7 @@ index.html
 site/
 .claude/
 serve.ps1
+/ics/
+/icon-*.png
+/favicon.png
+/manifest.webmanifest
