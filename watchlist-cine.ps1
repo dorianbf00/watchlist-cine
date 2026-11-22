@@ -238,13 +238,17 @@ function Test-SameDirector([string]$rpDirectors, [string[]]$lbDirectors) {
   $lbPre = @($lb | ForEach-Object { & $pre $_ })
   return [bool]($rp | Where-Object { $lbPre -contains (& $pre $_) })
 }
+# Vrai "page introuvable" (404), par opposition à une erreur réseau ou un blocage temporaire
+function Test-NotFound($err) {
+  try { return ([int]$err.Exception.Response.StatusCode -eq 404) } catch { return $false }
+}
 function Find-LbFilm($f, $tmdbId) {
   # 1) Identifiant TMDB donné par le Rétro Projecteur -> Letterboxd redirige vers la bonne fiche (le plus fiable)
   if ($tmdbId) {
     try {
       $info = Read-LbPage (Get-Utf8 "https://letterboxd.com/tmdb/$tmdbId/")
       if ($info.slug) { return $info }
-    } catch {}
+    } catch { if (-not (Test-NotFound $_)) { $script:LbError = $true } }
   }
   # 2) Adresse reconstruite à partir du titre original puis français (+ variante chiffres romains)
   $cands = New-Object System.Collections.Generic.List[string]
@@ -257,7 +261,7 @@ function Find-LbFilm($f, $tmdbId) {
     foreach ($v in $vars) { foreach ($c in @("$v-$($f.year)", $v)) { if (-not $cands.Contains($c)) { $cands.Add($c) } } }
   }
   foreach ($c in $cands) {
-    try { $p = Get-Utf8 "https://letterboxd.com/film/$c/" } catch { Start-Sleep -Milliseconds 150; continue }
+    try { $p = Get-Utf8 "https://letterboxd.com/film/$c/" } catch { if (-not (Test-NotFound $_)) { $script:LbError = $true }; Start-Sleep -Milliseconds 150; continue }
     $info = Read-LbPage $p
     if (-not $info.slug) { $info.slug = $c }
     if ($info.year -and $f.year -and [math]::Abs($info.year - [int]$f.year) -gt 1) { continue }
@@ -330,11 +334,13 @@ foreach ($key in @($others.Keys)) {
   # d'une ancienne version du script, sinon au bout de 7 jours).
   $fresh = $c -and ($c.poster -or ($c.v -ge 2 -and ($now - [datetime]$c.t).TotalDays -lt 7))
   if (-not $fresh) {
+    $script:LbError = $false
     $rp = Read-RpPage $f
     $info = Find-LbFilm $f $rp.tmdb; $looked++
     $img = $null
     if (-not $info.poster -and -not $rp.still) { $img = Find-WikiImage $f }
-    $v = if ($script:WikiLimited -and -not $info.poster -and -not $rp.still -and -not $img) { 1 } else { 2 }
+    # Échec réseau/blocage (pas un vrai "introuvable") : on retentera au prochain passage
+    $v = if ((-not $info.slug -and $script:LbError) -or ($script:WikiLimited -and -not $info.poster -and -not $rp.still -and -not $img)) { 1 } else { 2 }
     $c = [pscustomobject]@{ v = $v; slug = $info.slug; poster = $info.poster; rating = $info.rating; runtime = $info.runtime
       still = if ($rp.still) { $rp.still } else { $img }; t = $now.ToString('yyyy-MM-dd') }
     $cache[$f.id] = $c
