@@ -46,8 +46,19 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
 
 /* Barre jours + filtres (collante) */
 .bar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
-.days { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 0 8px; }
-.day { border: 1px solid var(--line); background: transparent; padding: 7px 4px 6px; text-align: center; text-transform: uppercase; line-height: 1.15; }
+/* 7 jours : bande défilante horizontalement sur téléphone, 7 colonnes sur ordinateur */
+.days { display: flex; gap: 8px; padding: 10px 0 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+  margin: 0 -16px; padding-left: 16px; padding-right: 16px; scroll-padding: 0 16px; }
+.days::-webkit-scrollbar { display: none; }
+.day { flex: 0 0 auto; min-width: 98px; scroll-snap-align: start; border: 1px solid var(--line); background: transparent; padding: 7px 6px 6px; text-align: center; text-transform: uppercase; line-height: 1.15; }
+@media (min-width: 860px) { .days { display: grid; grid-template-columns: repeat(7, 1fr); margin: 0; padding-left: 0; padding-right: 0; overflow: visible; } .day { min-width: 0; } }
+/* Interrupteur "Hors watchlist" */
+.chip-toggle { display: inline-flex; align-items: center; gap: 7px; }
+.chip-toggle .sw { width: 26px; height: 15px; border-radius: 999px; background: var(--hair); position: relative; transition: background .2s; flex: none; }
+.chip-toggle .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--bg); box-shadow: 0 1px 2px #0004; transition: transform .25s cubic-bezier(.34, 1.56, .64, 1); }
+.chip-toggle[aria-pressed="true"] { background: var(--blue-pale); color: var(--ink); }
+.chip-toggle[aria-pressed="true"] .sw { background: var(--blue); }
+.chip-toggle[aria-pressed="true"] .sw::after { transform: translateX(11px); }
 .day .dn { display: block; font-weight: 600; font-size: 13px; }
 .day .dd { display: block; font-size: 11px; color: var(--gray); }
 .day .dc { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 24px; color: var(--gray); margin-top: 3px; line-height: 1; }
@@ -201,6 +212,8 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
   <div class="wrap">
     <nav class="days" id="days" role="tablist" aria-label="Jour"></nav>
     <div class="filters" id="filters" aria-label="Filtres">
+      <button class="chip chip-toggle" id="others-toggle" aria-pressed="true"><span class="sw" aria-hidden="true"></span>Hors watchlist</button>
+      <span class="sep"></span>
       <button class="chip" data-bank="all" aria-pressed="true">Partout</button>
       <button class="chip" data-bank="rg" aria-pressed="false">Rive gauche</button>
       <button class="chip" data-bank="rd" aria-pressed="false">Rive droite</button>
@@ -239,7 +252,8 @@ function arr(zip) {
   return n === 1 ? '1<sup>er</sup>' : `${n}<sup>e</sup>`;
 }
 
-const state = { day: null, bank: 'all', classics: false };
+const state = { day: null, bank: 'all', classics: false, showOthers: true };
+try { state.showOthers = localStorage.getItem('showOthers') !== '0'; } catch {}
 const films = DATA.films || [];
 films.forEach((f) => { f.total = f.seances.reduce((n, s) => n + s.times.length, 0); });
 
@@ -261,12 +275,22 @@ function dayLabel(iso) {
   return { name: diff === 0 ? "Aujourd'hui" : diff === 1 ? 'Demain' : fr(d, { weekday: 'long' }), date: fr(d, { weekday: diff <= 1 ? 'short' : undefined, day: 'numeric', month: 'short' }) };
 }
 
+// 7 jours glissants : on ne montre jamais les jours déjà passés (la page peut dater de la veille)
+const todayIso = (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; })();
+const DAYS = DATA.days.filter((d) => d >= todayIso).length ? DATA.days.filter((d) => d >= todayIso) : DATA.days;
+
 function renderDays() {
-  $('#days').innerHTML = DATA.days.map((iso) => {
+  $('#days').innerHTML = DAYS.map((iso) => {
     const { name, date } = dayLabel(iso), n = filmsFor(iso).length;
     return `<button class="day" role="tab" data-day="${iso}" aria-selected="${iso === state.day}">
       <span class="dn">${esc(name)}</span><span class="dd">${esc(date)}</span><span class="dc">${n}<small> film${n > 1 ? 's' : ''}</small></span></button>`;
   }).join('');
+  // Onglet choisi bien visible dans la bande défilante (sans faire bouger la page verticalement)
+  const strip = $('#days'), sel = strip.querySelector('[aria-selected="true"]');
+  if (sel && strip.scrollWidth > strip.clientWidth) {
+    const target = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+    strip.scrollTo({ left: Math.max(0, target), behavior: calm.matches ? 'auto' : 'smooth' });
+  }
 }
 
 let othersShown = [];
@@ -278,6 +302,8 @@ function renderList() {
 
   // Autres films : grille d'affiches compacte ; toucher une affiche déplie où et quand il passe.
   // Ordre : ressorties d'abord (par année, comme le calendrier du Rétro Projecteur), puis nouveautés.
+  // Masquable avec le filtre "Hors watchlist".
+  if (!state.showOthers) { othersShown = []; $('#others').innerHTML = ''; return; }
   othersShown = filmsFor(state.day, others).filter((x) => x.next !== 99)
     .sort((a, b) => (a.f.year || 9999) - (b.f.year || 9999) || a.f.title.localeCompare(b.f.title, 'fr'));
   const n = othersShown.length;
@@ -393,8 +419,9 @@ function switchDay(iso) {
   const go = () => {
     render();
     main.classList.remove('leaving');
-    const bar = $('.bar');
-    if (scrollY > bar.offsetTop) window.scrollTo({ top: bar.offsetTop, behavior: calm.matches ? 'auto' : 'smooth' });
+    // On remonte en haut de la liste des films (juste sous la barre des jours, qui reste collée en haut)
+    const listTop = Math.max(0, main.getBoundingClientRect().top + scrollY - $('.bar').offsetHeight - 6);
+    if (scrollY > listTop) window.scrollTo({ top: listTop, behavior: calm.matches ? 'auto' : 'smooth' });
   };
   if (calm.matches) return go();
   renderDays();                      // l'onglet bascule tout de suite (petit rebond)
@@ -416,6 +443,14 @@ document.addEventListener('click', (e) => {
   const bank = e.target.closest('[data-bank]');
   if (bank) { state.bank = bank.dataset.bank; document.querySelectorAll('[data-bank]').forEach((b) => b.setAttribute('aria-pressed', b === bank)); render(); return; }
   if (e.target.closest('#classics')) { state.classics = !state.classics; $('#classics').setAttribute('aria-pressed', state.classics); render(); return; }
+  if (e.target.closest('#others-toggle')) {
+    state.showOthers = !state.showOthers;
+    $('#others-toggle').setAttribute('aria-pressed', state.showOthers);
+    try { localStorage.setItem('showOthers', state.showOthers ? '1' : '0'); } catch {}
+    renderList(); animateIn();
+    if (state.showOthers) $('#others .others-head')?.scrollIntoView({ block: 'nearest', behavior: calm.matches ? 'auto' : 'smooth' });
+    return;
+  }
   const th = e.target.closest('.th-name');
   if (th) { const [n, z] = th.dataset.map.split('|'); window.open(mapUrl(n, z), '_blank', 'noopener'); return; }
   const more = e.target.closest('.more');
@@ -426,11 +461,12 @@ document.addEventListener('click', (e) => {
 });
 
 const gen = new Date(DATA.generated);
-$('#sub').textContent = `${films.length} film${films.length > 1 ? 's' : ''} à l'affiche · du ${fr(parseDay(DATA.days[0]), { day: 'numeric', month: 'long' })} au ${fr(parseDay(DATA.days.at(-1)), { day: 'numeric', month: 'long' })}`;
+const nWeek = films.filter((f) => f.seances.some((s) => DAYS.includes(s.date))).length;
+$('#sub').textContent = `${nWeek} film${nWeek > 1 ? 's' : ''} de ta watchlist à l'affiche · du ${fr(parseDay(DAYS[0]), { day: 'numeric', month: 'long' })} au ${fr(parseDay(DAYS.at(-1)), { day: 'numeric', month: 'long' })}`;
 $('#foot').textContent = `Mis à jour le ${fr(gen, { weekday: 'long', day: 'numeric', month: 'long' })} à ${pad(gen.getHours())}h${pad(gen.getMinutes())} · ${DATA.watchlistCount} films dans la watchlist de ${DATA.user}`;
-const todayIso = (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; })();
+$('#others-toggle').setAttribute('aria-pressed', state.showOthers);
 let saved = null; try { saved = sessionStorage.getItem('day'); } catch {}
-state.day = DATA.days.includes(saved) ? saved : DATA.days.includes(todayIso) ? todayIso : DATA.days[0];
+state.day = DAYS.includes(saved) ? saved : DAYS.includes(todayIso) ? todayIso : DAYS[0];
 render();
 </script>
 </body>

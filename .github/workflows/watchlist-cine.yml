@@ -2,7 +2,8 @@ name: Watchlist au cinéma
 
 on:
   schedule:
-    - cron: "0 8 */3 * *"   # 8h UTC (9h/10h à Paris), les 1, 4, 7, 10… du mois
+    - cron: "0 4 * * *"     # tous les jours à 4h UTC (5h/6h à Paris) : page à jour, 7 jours glissants, sans notif
+    - cron: "0 8 */3 * *"   # 8h UTC (9h/10h à Paris), les 1, 4, 7, 10… du mois : mise à jour + notif
   workflow_dispatch:         # bouton "Run workflow" pour lancer à la main
   push:                      # chaque modif du code republie la page (sans notif)
     branches: [main]
@@ -75,7 +76,8 @@ jobs:
 
   notify:
     needs: deploy
-    if: ${{ github.event_name != 'push' }}
+    # Notif : lancement manuel, ou passage planifié "tous les 3 jours" (pas la mise à jour quotidienne ni les modifs de code)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '0 8 */3 * *' }}
     runs-on: ubuntu-latest
     env:
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}

@@ -8,7 +8,7 @@
 #>
 param(
   [Parameter(Mandatory = $true)][string]$User,
-  [int]$Days = 3,
+  [int]$Days = 7,
   [string]$OutDir,
   [string]$NtfyTopic,   # si fourni : envoie une notification push via ntfy.sh
   [string]$PageUrl,     # URL publique de la page (ouverte quand on touche la notif)
@@ -496,8 +496,8 @@ foreach ($f in $films) { Write-Host (" - {0} ({1})" -f $f.title, $f.year) }
 $names = ($films | Select-Object -First 5 | ForEach-Object { $_.title }) -join ' · '
 if ($films.Count -gt 5) { $names += ' …' }
 $notif = [ordered]@{
-  title   = if ($films) { "🎬 $($films.Count) film(s) de ta watchlist au ciné" } else { 'Rien de ta watchlist au ciné' }
-  message = if ($films) { $names } else { 'Aucun film de ta watchlist ces 3 prochains jours.' }
+  title   = if ($films) { "🎬 $($films.Count) film(s) de ta watchlist au ciné cette semaine" } else { 'Rien de ta watchlist au ciné' }
+  message = if ($films) { $names } else { "Aucun film de ta watchlist ces $Days prochains jours." }
   click   = if ($PageUrl) { $PageUrl } else { 'https://leretroprojecteur.com/' }
 }
 $notif.actions = @(@{ action = 'view'; label = 'Ouvrir la page'; url = $notif.click })
