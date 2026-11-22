@@ -238,7 +238,15 @@ function Test-SameDirector([string]$rpDirectors, [string[]]$lbDirectors) {
   $lbPre = @($lb | ForEach-Object { & $pre $_ })
   return [bool]($rp | Where-Object { $lbPre -contains (& $pre $_) })
 }
-function Find-LbFilm($f) {
+function Find-LbFilm($f, $tmdbId) {
+  # 1) Identifiant TMDB donné par le Rétro Projecteur -> Letterboxd redirige vers la bonne fiche (le plus fiable)
+  if ($tmdbId) {
+    try {
+      $info = Read-LbPage (Get-Utf8 "https://letterboxd.com/tmdb/$tmdbId/")
+      if ($info.slug) { return $info }
+    } catch {}
+  }
+  # 2) Adresse reconstruite à partir du titre original puis français (+ variante chiffres romains)
   $cands = New-Object System.Collections.Generic.List[string]
   foreach ($t in (@($f.original, $f.title) | Where-Object { $_ } | Select-Object -Unique)) {
     $s = Get-LbSlug $t; if (-not $s) { continue }
@@ -258,6 +266,55 @@ function Find-LbFilm($f) {
   }
   return $null
 }
+# Fiche Rétro Projecteur : identifiant TMDB + photo du film (image de partage), si ce n'est pas l'image générique du site
+function Read-RpPage($f) {
+  $o = @{ tmdb = $null; still = $null }
+  try {
+    $p = Get-Utf8 "https://leretroprojecteur.com/film/$($f.id)"
+    if ($p -match '\\"tmdb_id\\":(\d+)') { $o.tmdb = $Matches[1] }
+    if ($p -match 'og:image" content="([^"]+)"' -and $Matches[1] -notmatch 'opengraph-image') { $o.still = $Matches[1] }
+  } catch {}
+  $o
+}
+# Dernier recours : image principale de l'article Wikipédia du film (souvent l'affiche)
+function Find-WikiImage($f) {
+  # Titres essayés : complet, puis sans sous-titre ("Vivre sa vie: Film en douze tableaux" -> "Vivre sa vie")
+  $short = { param($s) if ($s) { ($s -split '\s*[:–—(]\s*|\s+-\s+|\s+/\s+', 2)[0].Trim() } }
+  $tries = @(@('fr', $f.title), @('en', $f.original), @('fr', $f.original),
+             @('fr', (& $short $f.title)), @('en', (& $short $f.original))) |
+    Where-Object { $_[1] -and $_[1].Length -ge 3 }
+  if ($script:WikiLimited) { return $null }
+  $seen = @{}
+  foreach ($t in $tries) {
+    if ($seen["$($t[0])|$($t[1])"]) { continue }; $seen["$($t[0])|$($t[1])"] = 1
+    Start-Sleep -Milliseconds 400
+    $q = [uri]::EscapeDataString("$($t[1]) $($f.year) film")
+    $u = "https://$($t[0]).wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrsearch=$q&gsrlimit=3&prop=pageimages&piprop=original&pilicense=any"
+    $j = $null
+    foreach ($attempt in 1..2) {
+      try {
+        $r = Invoke-WebRequest -Uri $u -UserAgent 'watchlist-cine/1.0 (projet perso)' -UseBasicParsing -TimeoutSec 30
+        $j = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()) | ConvertFrom-Json
+        break
+      } catch {
+        if ($env:WC_DEBUG) { Write-Host "  Wikipédia ($($t[0]), $($t[1])) : $_" }
+        if ("$_" -notmatch 'too many requests') { break }
+        if ($attempt -eq 2) { $script:WikiLimited = $true; return $null }
+        Start-Sleep -Seconds 8
+      }
+    }
+    if (-not $j -or -not $j.query) { continue }
+    $want = (Get-Words $t[1]) -join ''
+    foreach ($pg in ($j.query.pages.PSObject.Properties.Value | Sort-Object index)) {
+      $img = $pg.original.source
+      if (-not $img -or $img -match '\.svg$') { continue }
+      # Le titre de l'article doit être exactement celui du film, éventuellement suivi de "(film)" / "(film, 1962)"
+      $pt = (Get-Words $pg.title) -join ''
+      if ($pt -in @($want, "${want}film", "$want$($f.year)film", "${want}film$($f.year)", "$want$($f.year)")) { return $img }
+    }
+  }
+  return $null
+}
 function Merge-Seances($dst, $src) {
   foreach ($s in $src.seances) {
     $same = $dst.seances | Where-Object { $_.date -eq $s.date -and $_.theater -eq $s.theater } | Select-Object -First 1
@@ -269,14 +326,21 @@ $now = Get-Date; $looked = 0; $moved = @()
 foreach ($key in @($others.Keys)) {
   $f = $others[$key]
   $c = $cache[$f.id]
-  # On retente les films non trouvés au bout de 7 jours
-  $fresh = $c -and ($c.slug -or (($now - [datetime]$c.t).TotalDays -lt 7))
+  # Déjà trouvé avec une affiche -> on garde. Sinon on retente (immédiatement si l'entrée date
+  # d'une ancienne version du script, sinon au bout de 7 jours).
+  $fresh = $c -and ($c.poster -or ($c.v -ge 2 -and ($now - [datetime]$c.t).TotalDays -lt 7))
   if (-not $fresh) {
-    $info = Find-LbFilm $f; $looked++
-    $c = [pscustomobject]@{ slug = $info.slug; poster = $info.poster; rating = $info.rating; runtime = $info.runtime; t = $now.ToString('yyyy-MM-dd') }
+    $rp = Read-RpPage $f
+    $info = Find-LbFilm $f $rp.tmdb; $looked++
+    $img = $null
+    if (-not $info.poster -and -not $rp.still) { $img = Find-WikiImage $f }
+    $v = if ($script:WikiLimited -and -not $info.poster -and -not $rp.still -and -not $img) { 1 } else { 2 }
+    $c = [pscustomobject]@{ v = $v; slug = $info.slug; poster = $info.poster; rating = $info.rating; runtime = $info.runtime
+      still = if ($rp.still) { $rp.still } else { $img }; t = $now.ToString('yyyy-MM-dd') }
     $cache[$f.id] = $c
     Start-Sleep -Milliseconds 250
   }
+  $f.still = $c.still
   if (-not $c.slug) { continue }
   $f.slug = $c.slug; $f.poster = $c.poster; $f.rating = $c.rating; $f.runtime = $c.runtime
   if ($watchBySlug.ContainsKey($c.slug)) {
@@ -329,10 +393,29 @@ foreach ($f in @($results.Values)) {
 # Les films écartés (homonymes) rejoignent les "autres films"
 foreach ($s in $rejected) {
   $f = $results[$s]; $results.Remove($s)
-  $f.slug = $null; $f.poster = $null; $f.rating = $null; $f.runtime = $null; $f.still = $null
+  $f.slug = $null; $f.poster = $null; $f.rating = $null; $f.runtime = $null
+  $rpInfo = Read-RpPage $f
+  $f.still = if ($rpInfo.still) { $rpInfo.still } else { Find-WikiImage $f }
   if (-not $others.Contains("rp:$($f.id)")) { $others["rp:$($f.id)"] = $f }
 }
 Write-Host "Autres films à l'affiche (hors watchlist) : $($others.Count)"
+
+# Film sans image : on reprend celle d'une autre fiche du même titre et du même réalisateur
+# (le Rétro Projecteur a parfois 2 fiches pour un même film, ex. "Les Damnés" 1961 / 1962)
+function Get-TwinKeys($f) {
+  $dir = (Get-Surnames @($f.directors)) -join ','
+  $short = ($f.title -split '\s*[:–—(]\s*|\s+-\s+|\s+/\s+', 2)[0]   # "Vivre sa vie: Film en douze tableaux" -> "Vivre sa vie"
+  @("$((Get-Words $f.title) -join '')|$dir", "$((Get-Words $short) -join '')|$dir") | Select-Object -Unique
+}
+$withImg = @{}
+foreach ($f in @($results.Values) + @($others.Values)) {
+  if ($f.poster -or $f.still) { foreach ($k in (Get-TwinKeys $f)) { $withImg[$k] = $f } }
+}
+foreach ($f in @($others.Values)) {
+  if ($f.poster -or $f.still) { continue }
+  $twin = (Get-TwinKeys $f | ForEach-Object { $withImg[$_] } | Where-Object { $_ } | Select-Object -First 1)
+  if ($twin) { $f.poster = $twin.poster; $f.still = $twin.still; if (-not $f.slug) { $f.slug = $twin.slug } }
+}
 
 # --- 4. Un fichier calendrier (.ics) par séance --------------------------------
 # Toucher une séance sur la page ouvre ce fichier : l'iPhone propose alors "Ajouter au calendrier".
