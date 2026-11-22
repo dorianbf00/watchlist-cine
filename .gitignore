@@ -7,3 +7,4 @@ serve.ps1
 /icon-*.png
 /favicon.png
 /manifest.webmanifest
+/lb-cache.json

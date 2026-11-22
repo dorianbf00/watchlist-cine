@@ -13,6 +13,7 @@ param(
   [string]$NtfyTopic,   # si fourni : envoie une notification push via ntfy.sh
   [string]$PageUrl,     # URL publique de la page (ouverte quand on touche la notif)
   [string]$NotifOut,    # écrit le contenu de la notif (titre/message/lien) dans ce fichier JSON
+  [string]$CachePath,   # cache des fiches Letterboxd trouvées (par défaut lb-cache.json à côté du script)
   [switch]$NoOpen
 )
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -201,6 +202,95 @@ function Get-Surnames([string[]]$names) {
   @($names | ForEach-Object { $_ -split '\s*,\s*|\s+(?:et|and|&)\s+' } | Where-Object { $_ } |
     ForEach-Object { $w = @(Get-Words $_); if ($w) { $w[-1] } })
 }
+# --- 3a. Fiche Letterboxd des autres films : affiche + 2e chance de correspondance -------
+# On reconstruit l'adresse Letterboxd à partir du titre (original puis français), on vérifie l'année
+# et le réalisateur, puis on compare la FICHE (pas le titre) avec la watchlist : "Mark Dixon, détective"
+# est bien "Where the Sidewalk Ends", "L'Eclipse" est "L'eclisse", etc.
+$cachePath = if ($CachePath) { $CachePath } else { Join-Path $ScriptDir 'lb-cache.json' }
+$cache = @{}
+if (Test-Path $cachePath) {
+  try { (Get-Content $cachePath -Raw -Encoding UTF8 | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $cache[$_.Name] = $_.Value } } catch {}
+}
+$watchBySlug = @{}; foreach ($w in $watch) { $watchBySlug[$w.Slug] = $w }
+$RomanOf = @{ '2' = 'ii'; '3' = 'iii'; '4' = 'iv'; '5' = 'v'; '6' = 'vi'; '7' = 'vii'; '8' = 'viii'; '9' = 'ix'; '10' = 'x' }
+$ArabicOf = @{}; foreach ($k in $RomanOf.Keys) { $ArabicOf[$RomanOf[$k]] = $k }
+
+function Get-LbSlug([string]$s) {
+  $d = $s.Normalize([Text.NormalizationForm]::FormD)
+  $sb = New-Object Text.StringBuilder
+  foreach ($c in $d.ToCharArray()) { if ([Globalization.CharUnicodeInfo]::GetUnicodeCategory($c) -ne 'NonSpacingMark') { [void]$sb.Append($c) } }
+  (($sb.ToString().ToLower() -replace "['’]", '' -replace '&', 'and' -replace '[^a-z0-9]+', '-').Trim('-'))
+}
+function Read-LbPage([string]$p) {
+  $o = [ordered]@{ slug = $null; year = 0; poster = $null; rating = $null; runtime = $null; directors = @() }
+  if ($p -match 'og:url" content="https://letterboxd\.com/film/([^/"]+)/') { $o.slug = $Matches[1] }
+  if ($p -match 'og:title" content="[^"]*\((\d{4})\)') { $o.year = [int]$Matches[1] }
+  if ($p -match '"image":"(https://a\.ltrbxd\.com/resized/[^"]+)"') { $o.poster = $Matches[1] }
+  if ($p -match '"ratingValue":([0-9.]+)') { $o.rating = [double]$Matches[1] }
+  if ($p -match '(\d+)&nbsp;mins') { $o.runtime = [int]$Matches[1] }
+  if ($p -match '"director":\[(.*?)\]') { $o.directors = @([regex]::Matches($Matches[1], '"name":"([^"]+)"') | ForEach-Object { [regex]::Unescape($_.Groups[1].Value) }) }
+  [pscustomobject]$o
+}
+function Test-SameDirector([string]$rpDirectors, [string[]]$lbDirectors) {
+  $rp = Get-Surnames @($rpDirectors); $lb = Get-Surnames $lbDirectors
+  if (-not $rp -or -not $lb) { return $true }   # info manquante : on ne bloque pas
+  $pre = { param($n) if ($n.Length -gt 4) { $n.Substring(0, 4) } else { $n } }
+  $lbPre = @($lb | ForEach-Object { & $pre $_ })
+  return [bool]($rp | Where-Object { $lbPre -contains (& $pre $_) })
+}
+function Find-LbFilm($f) {
+  $cands = New-Object System.Collections.Generic.List[string]
+  foreach ($t in (@($f.original, $f.title) | Where-Object { $_ } | Select-Object -Unique)) {
+    $s = Get-LbSlug $t; if (-not $s) { continue }
+    $vars = @($s)
+    # "Evil Dead 2" <-> "evil-dead-ii"
+    if ($s -match '^(.*)-(\d+)$' -and $RomanOf.ContainsKey($Matches[2])) { $vars += "$($Matches[1])-$($RomanOf[$Matches[2]])" }
+    elseif ($s -match '^(.*)-([ivx]+)$' -and $ArabicOf.ContainsKey($Matches[2])) { $vars += "$($Matches[1])-$($ArabicOf[$Matches[2]])" }
+    foreach ($v in $vars) { foreach ($c in @("$v-$($f.year)", $v)) { if (-not $cands.Contains($c)) { $cands.Add($c) } } }
+  }
+  foreach ($c in $cands) {
+    try { $p = Get-Utf8 "https://letterboxd.com/film/$c/" } catch { Start-Sleep -Milliseconds 150; continue }
+    $info = Read-LbPage $p
+    if (-not $info.slug) { $info.slug = $c }
+    if ($info.year -and $f.year -and [math]::Abs($info.year - [int]$f.year) -gt 1) { continue }
+    if (-not (Test-SameDirector $f.directors $info.directors)) { continue }
+    return $info
+  }
+  return $null
+}
+function Merge-Seances($dst, $src) {
+  foreach ($s in $src.seances) {
+    $same = $dst.seances | Where-Object { $_.date -eq $s.date -and $_.theater -eq $s.theater } | Select-Object -First 1
+    if ($same) { $same.times = [object[]]@(($same.times + $s.times) | Sort-Object -Unique) } else { [void]$dst.seances.Add($s) }
+  }
+}
+
+$now = Get-Date; $looked = 0; $moved = @()
+foreach ($key in @($others.Keys)) {
+  $f = $others[$key]
+  $c = $cache[$f.id]
+  # On retente les films non trouvés au bout de 7 jours
+  $fresh = $c -and ($c.slug -or (($now - [datetime]$c.t).TotalDays -lt 7))
+  if (-not $fresh) {
+    $info = Find-LbFilm $f; $looked++
+    $c = [pscustomobject]@{ slug = $info.slug; poster = $info.poster; rating = $info.rating; runtime = $info.runtime; t = $now.ToString('yyyy-MM-dd') }
+    $cache[$f.id] = $c
+    Start-Sleep -Milliseconds 250
+  }
+  if (-not $c.slug) { continue }
+  $f.slug = $c.slug; $f.poster = $c.poster; $f.rating = $c.rating; $f.runtime = $c.runtime
+  if ($watchBySlug.ContainsKey($c.slug)) {
+    # Titre différent, mais c'est bien un film de la watchlist
+    Write-Host "Rattrapé via la fiche Letterboxd : $($f.title) = $($watchBySlug[$c.slug].Name)"
+    $others.Remove($key); $f.exact = $true
+    if ($results.Contains($c.slug)) { Merge-Seances $results[$c.slug] $f } else { $results[$c.slug] = $f }
+  }
+}
+$cache.GetEnumerator() | ForEach-Object -Begin { $o = [ordered]@{} } -Process { $o[$_.Key] = $_.Value } -End {
+  [IO.File]::WriteAllText($cachePath, ($o | ConvertTo-Json -Depth 4 -Compress), (New-Object Text.UTF8Encoding($false))) }
+Write-Host "Fiches Letterboxd recherchées : $looked (cache : $($cache.Count))"
+
+# --- 3b. Films de la watchlist : affiche, note, durée + vérification du réalisateur ----
 $rejected = @()
 foreach ($f in @($results.Values)) {
   # L'affiche est dans les données structurées (JSON-LD) de la fiche Letterboxd ; 3 essais en cas d'erreur réseau
@@ -239,7 +329,7 @@ foreach ($f in @($results.Values)) {
 # Les films écartés (homonymes) rejoignent les "autres films"
 foreach ($s in $rejected) {
   $f = $results[$s]; $results.Remove($s)
-  $f.slug = $null; $f.poster = $null; $f.rating = $null; $f.runtime = $null
+  $f.slug = $null; $f.poster = $null; $f.rating = $null; $f.runtime = $null; $f.still = $null
   if (-not $others.Contains("rp:$($f.id)")) { $others["rp:$($f.id)"] = $f }
 }
 Write-Host "Autres films à l'affiche (hors watchlist) : $($others.Count)"

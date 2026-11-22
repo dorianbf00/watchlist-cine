@@ -23,6 +23,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Cache des fiches Letterboxd déjà trouvées (affiches des autres films) : évite de tout rechercher à chaque passage
+      - uses: actions/cache@v4
+        with:
+          path: lb-cache.json
+          key: lb-cache-${{ github.run_id }}
+          restore-keys: lb-cache-
+
       - name: Générer la page
         shell: pwsh
         run: |
