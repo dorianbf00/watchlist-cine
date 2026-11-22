@@ -126,10 +126,11 @@ $notif = [ordered]@{
   message = if ($films) { $names } else { 'Aucun film de ta watchlist ces 3 prochains jours.' }
   click   = if ($PageUrl) { $PageUrl } else { 'https://leretroprojecteur.com/' }
 }
-if ($NotifOut) { [IO.File]::WriteAllText($NotifOut, ($notif | ConvertTo-Json), (New-Object Text.UTF8Encoding($false))) }
+$notif.actions = @(@{ action = 'view'; label = 'Ouvrir la page'; url = $notif.click })
+if ($NotifOut) { [IO.File]::WriteAllText($NotifOut, ($notif | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding($false))) }
 if ($NtfyTopic) {
   $notif.topic = $NtfyTopic
-  $payload = $notif | ConvertTo-Json
+  $payload = $notif | ConvertTo-Json -Depth 4
   Invoke-RestMethod -Uri 'https://ntfy.sh/' -Method Post -ContentType 'application/json; charset=utf-8' `
     -Body ([Text.Encoding]::UTF8.GetBytes($payload)) | Out-Null
   Write-Host "Notification ntfy envoyée"
