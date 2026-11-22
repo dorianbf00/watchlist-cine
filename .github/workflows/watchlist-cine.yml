@@ -28,6 +28,7 @@ jobs:
         run: |
           $owner = $env:GITHUB_REPOSITORY_OWNER.ToLower(); $repo = $env:GITHUB_REPOSITORY.Split('/')[1]
           New-Item -ItemType Directory -Force site | Out-Null
+          Copy-Item app/* site/
           ./watchlist-cine.ps1 -User $env:LETTERBOXD_USER -OutDir site -NoOpen `
             -PageUrl "https://$owner.github.io/$repo/" -NotifOut "$env:RUNNER_TEMP/notif.json"
 
