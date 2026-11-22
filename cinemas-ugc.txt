@@ -1,0 +1,42 @@
+# Cinémas parisiens qui acceptent la carte UGC Illimité, avec les noms utilisés par le Rétro Projecteur.
+# Source : https://www.ugc.fr/cinemas-acceptant-ui.html (liste vérifiée le 22/11/2026).
+# Tous les cinémas dont le nom commence par "UGC" ou "mk2" sont acceptés automatiquement.
+# Une salle par ligne ; les accents, majuscules et tirets sont ignorés à la comparaison.
+
+Le Grand Rex
+Luminor Hôtel de Ville
+Cinéma du Panthéon
+Écoles Cinéma Club
+Épée de bois
+Espace Saint-Michel
+Filmothèque du Quartier Latin
+Le Champo
+Le Grand Action
+Reflet Médicis
+Studio Galande
+Studio des Ursulines
+Christine Cinéma Club
+L'Arlequin
+Lucernaire
+Nouvel Odéon
+Saint-André des Arts
+Les 3 Luxembourg
+Saint Germain des Près
+Jeu de Paume
+Le Balzac
+Elysées Lincoln
+Publicis Cinémas
+Les Cinq Caumartin
+Max Linder Panorama
+L'Archipel
+Le Brady
+Le Louxor
+Majestic Bastille
+L'Escurial
+L'Entrepôt
+Sept Parnassiens
+Cinéma Chaplin Denfert
+Cinéma Chaplin Saint Lambert
+Majestic Passy
+Le Cinéma des Cinéastes
+Mac-Mahon

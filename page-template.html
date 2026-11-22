@@ -240,7 +240,7 @@ function renderList() {
       </div>`).join('') + (extra > 0 ? `<button class="more">+ ${extra} autre${extra > 1 ? 's' : ''} salle${extra > 1 ? 's' : ''}</button>` : '');
     return `<article class="film">
       <a class="poster" href="https://letterboxd.com/film/${esc(f.slug)}/" target="_blank" rel="noopener" aria-label="${esc(f.title)} sur Letterboxd">
-        <span class="ph">${initials}</span>${f.poster ? `<img src="${esc(f.poster)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+        <span class="ph">${initials}</span>${(f.poster || f.still) ? `<img src="${esc(f.poster || f.still)}" alt="" loading="lazy" referrerpolicy="no-referrer" ${f.poster && f.still ? `data-still="${esc(f.still)}"` : ''} onerror="if(this.dataset.still){this.src=this.dataset.still;delete this.dataset.still}else{this.remove()}">` : ''}
       </a>
       <div>
         <div class="badges">${badges.join('')}</div>

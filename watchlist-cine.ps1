@@ -61,6 +61,16 @@ while ($true) {
 Write-Host "Watchlist : $($watch.Count) films"
 
 # --- 2. Séances Rétro Projecteur -----------------------------------------
+# Salles retenues : Paris intra-muros (75xxx) ET carte UGC Illimité acceptée
+$ugcList = @{}
+Get-Content (Join-Path $ScriptDir 'cinemas-ugc.txt') -Encoding UTF8 | ForEach-Object { $_.Trim() } |
+  Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object { $ugcList[(Normalize $_)] = $true }
+function Test-Theater($th) {
+  if ("$($th.zipcode)" -notmatch '^75\d{3}$') { return $false }
+  $n = Normalize $th.name
+  return ($n.StartsWith('ugc') -or $n.StartsWith('mk2') -or $ugcList.ContainsKey($n))
+}
+
 $results = [ordered]@{}
 $today = (Get-Date).Date
 $dayList = @()
@@ -75,16 +85,18 @@ for ($i = 0; $i -lt $Days; $i++) {
       ($keys -contains $_.Key) -and ((-not $_.Year) -or (-not $mv.year) -or ([math]::Abs($_.Year - [int]$mv.year) -le 1))
     } | Select-Object -First 1
     if (-not $match) { continue }
+    $theaters = @($mv.showtimes_theater | Where-Object { Test-Theater $_ })
+    if (-not $theaters) { continue }
 
     if (-not $results.Contains($mv.id)) {
       $results[$mv.id] = [ordered]@{
         id = $mv.id; title = $mv.title; original = $mv.original_title; year = $mv.year
         directors = $mv.directors; countries = $mv.countries; slug = $match.Slug
-        poster = $null; rating = $null; runtime = $null
+        poster = $null; still = $null; rating = $null; runtime = $null
         seances = New-Object System.Collections.ArrayList
       }
     }
-    foreach ($th in $mv.showtimes_theater) {
+    foreach ($th in $theaters) {
       $times = [object[]]@($th.seances.PSObject.Properties | ForEach-Object { [double]$_.Value.time } | Sort-Object)
       [void]$results[$mv.id].seances.Add([ordered]@{
         date = $iso; theater = $th.name; zip = $th.zipcode; bank = $th.neighborhood; times = $times })
@@ -94,12 +106,24 @@ for ($i = 0; $i -lt $Days; $i++) {
 
 # --- 3. Infos Letterboxd (affiche, note, durée) ---------------------------
 foreach ($f in $results.Values) {
-  try {
-    $h = Get-Utf8 "https://letterboxd.com/film/$($f.slug)/"
-    if ($h -match '"image":"(https://a\.ltrbxd\.com/resized/film-poster/[^"]+)"') { $f.poster = $Matches[1] }
-    if ($h -match '"ratingValue":([0-9.]+)') { $f.rating = [double]$Matches[1] }
-    if ($h -match '(\d+)&nbsp;mins') { $f.runtime = [int]$Matches[1] }
-  } catch { Write-Host "Infos Letterboxd indisponibles pour $($f.slug)" }
+  # L'affiche est dans les données structurées (JSON-LD) de la fiche Letterboxd ; 3 essais en cas d'erreur réseau
+  for ($try = 1; $try -le 3 -and -not $f.poster; $try++) {
+    try {
+      $h = Get-Utf8 "https://letterboxd.com/film/$($f.slug)/"
+      if ($h -match '"image":"(https://a\.ltrbxd\.com/resized/[^"]+)"') { $f.poster = $Matches[1] }
+      if ($h -match '"ratingValue":([0-9.]+)') { $f.rating = [double]$Matches[1] }
+      if ($h -match '(\d+)&nbsp;mins') { $f.runtime = [int]$Matches[1] }
+    } catch { Write-Host "Letterboxd indisponible pour $($f.slug) (essai $try)" }
+    if (-not $f.poster) { Start-Sleep -Seconds (2 * $try) }
+  }
+  # Dernier recours : la photo du film utilisée par le Rétro Projecteur
+  if (-not $f.poster) {
+    try {
+      $h = Get-Utf8 "https://leretroprojecteur.com/film/$($f.id)"
+      if ($h -match 'og:image" content="([^"]+)"') { $f.still = $Matches[1] }
+    } catch {}
+    Write-Host "Pas d'affiche Letterboxd pour $($f.slug) -> photo de secours : $([bool]$f.still)"
+  }
   Start-Sleep -Milliseconds 300
 }
 
