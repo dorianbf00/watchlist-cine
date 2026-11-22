@@ -40,6 +40,50 @@ function Normalize([string]$s) {
   ($sb.ToString().ToLower() -replace '&', 'and' -replace '[^a-z0-9]', '')
 }
 
+# Clés de comparaison d'un titre, tolérantes aux variantes courantes entre Letterboxd et le Rétro Projecteur :
+#  - chiffres romains <-> arabes ("Evil Dead II" = "Evil Dead 2")
+#  - article en tête ("The Thing" = "Thing", "Le Mépris" = "Mépris")
+#  - sous-titre (partie avant ":" ou " - "), utilisée seulement avec la même année exacte
+$Roman = @{ ii = '2'; iii = '3'; iv = '4'; v = '5'; vi = '6'; vii = '7'; viii = '8'; ix = '9'; x = '10' }
+$Articles = @('the', 'a', 'an', 'le', 'la', 'les', 'l', 'un', 'une', 'der', 'die', 'das', 'el', 'il', 'lo')
+function Get-Words([string]$s) {
+  if (-not $s) { return @() }
+  $d = $s.Normalize([Text.NormalizationForm]::FormD)
+  $sb = New-Object Text.StringBuilder
+  foreach ($c in $d.ToCharArray()) {
+    if ([Globalization.CharUnicodeInfo]::GetUnicodeCategory($c) -ne 'NonSpacingMark') { [void]$sb.Append($c) }
+  }
+  $w = @(($sb.ToString().ToLower() -replace '&', ' and ' -replace "['’]", ' ') -split '[^a-z0-9]+' | Where-Object { $_ })
+  for ($i = 0; $i -lt $w.Count; $i++) {
+    if ($Roman.ContainsKey($w[$i])) { $w[$i] = $Roman[$w[$i]] }
+    elseif ($w[$i] -eq 'i' -and $i -eq $w.Count - 1 -and $i -gt 0) { $w[$i] = '1' }   # "Vol. I" en fin de titre
+  }
+  return $w
+}
+function Get-TitleKeys([string]$s) {
+  $keys = New-Object System.Collections.Generic.HashSet[string]
+  $w = Get-Words $s
+  if (-not $w) { return [pscustomobject]@{ Full = ''; Strong = $keys; Sub = '' } }
+  [void]$keys.Add(($w -join ''))
+  if ($w.Count -gt 1 -and $Articles -contains $w[0]) { [void]$keys.Add((($w | Select-Object -Skip 1) -join '')) }
+  $sub = ''
+  $parts = $s -split '\s*[:–—]\s*|\s+-\s+', 2
+  if ($parts.Count -gt 1) { $sub = ((Get-Words $parts[0]) -join ''); if ($sub.Length -lt 5) { $sub = '' } }
+  [pscustomobject]@{ Full = ($w -join ''); Strong = $keys; Sub = $sub }
+}
+# Renvoie 'exact' (même titre, chiffres romains compris), 'loose' (article/sous-titre) ou $null
+function Test-SameFilm($a, [int]$aYear, $b, [int]$bYear) {
+  $yearOk = (-not $aYear) -or (-not $bYear) -or ([math]::Abs($aYear - $bYear) -le 1)
+  if ($yearOk -and $a.Full -and $a.Full -eq $b.Full) { return 'exact' }
+  if ($yearOk) { foreach ($k in $a.Strong) { if ($b.Strong.Contains($k)) { return 'loose' } } }
+  # Sous-titre : "Twin Peaks: Fire Walk with Me" ~ "Twin Peaks" — seulement si même année exacte
+  if ($aYear -and $bYear -and $aYear -eq $bYear) {
+    if ($a.Sub -and $b.Strong.Contains($a.Sub)) { return 'loose' }
+    if ($b.Sub -and $a.Strong.Contains($b.Sub)) { return 'loose' }
+  }
+  return $null
+}
+
 # --- 1. Watchlist Letterboxd ---------------------------------------------
 $watch = @()
 $page = 1
@@ -52,13 +96,19 @@ while ($true) {
     $name = [System.Net.WebUtility]::HtmlDecode($m.Groups[1].Value)
     $year = $null
     if ($name -match '^(.*) \((\d{4})\)$') { $name = $Matches[1]; $year = [int]$Matches[2] }
-    $watch += [pscustomobject]@{ Name = $name; Year = $year; Slug = $m.Groups[2].Value; Key = (Normalize $name) }
+    $watch += [pscustomobject]@{ Name = $name; Year = $year; Slug = $m.Groups[2].Value; Keys = (Get-TitleKeys $name) }
   }
   $page++
   if ($page -gt 100) { break }
   Start-Sleep -Milliseconds 400
 }
 Write-Host "Watchlist : $($watch.Count) films"
+# Index clé -> films de la watchlist (titre complet, sans article, et sous-titre)
+$wIndex = @{}
+foreach ($w in $watch) {
+  $ks = @($w.Keys.Strong) + @($w.Keys.Sub | Where-Object { $_ })
+  foreach ($k in $ks) { if (-not $wIndex.ContainsKey($k)) { $wIndex[$k] = @() }; $wIndex[$k] += $w }
+}
 
 # --- 2. Séances Rétro Projecteur -----------------------------------------
 # Salles retenues : Paris intra-muros (75xxx) ET carte UGC Illimité acceptée
@@ -87,42 +137,85 @@ for ($i = 0; $i -lt $Days; $i++) {
   $dayList += $iso
   $movies = (Get-Utf8 "https://leretroprojecteur.com/api/movies/all-by-day/$iso") | ConvertFrom-Json
   foreach ($mv in $movies) {
-    $keys = @((Normalize $mv.title), (Normalize $mv.original_title)) | Where-Object { $_ }
-    $match = $watch | Where-Object {
-      ($keys -contains $_.Key) -and ((-not $_.Year) -or (-not $mv.year) -or ([math]::Abs($_.Year - [int]$mv.year) -le 1))
-    } | Select-Object -First 1
+    $mvKeys = @((Get-TitleKeys $mv.title), (Get-TitleKeys $mv.original_title))
+    $mvYear = if ($mv.year) { [int]$mv.year } else { 0 }
+    $cands = @()
+    foreach ($k in $mvKeys) {
+      foreach ($s in $k.Strong) { if ($wIndex.ContainsKey($s)) { $cands += $wIndex[$s] } }
+      if ($k.Sub -and $wIndex.ContainsKey($k.Sub)) { $cands += $wIndex[$k.Sub] }
+    }
+    # On garde la meilleure correspondance : 'exact' l'emporte sur 'loose'
+    $match = $null; $kind = $null
+    foreach ($w in $cands) {
+      $wYear = if ($w.Year) { [int]$w.Year } else { 0 }
+      foreach ($k in $mvKeys) {
+        $r = Test-SameFilm $w.Keys $wYear $k $mvYear
+        if ($r -eq 'exact') { $match = $w; $kind = 'exact'; break }
+        if ($r -eq 'loose' -and -not $match) { $match = $w; $kind = 'loose' }
+      }
+      if ($kind -eq 'exact') { break }
+    }
     if (-not $match) { continue }
     $theaters = @($mv.showtimes_theater | Where-Object { Test-Theater $_ })
     if (-not $theaters) { continue }
 
-    if (-not $results.Contains($mv.id)) {
-      $results[$mv.id] = [ordered]@{
+    # Une seule carte par film Letterboxd : le Rétro Projecteur a parfois 2 fiches pour le même film
+    $key = $match.Slug
+    if (-not $results.Contains($key)) {
+      $results[$key] = [ordered]@{
         id = $mv.id; title = $mv.title; original = $mv.original_title; year = $mv.year
         directors = $mv.directors; countries = $mv.countries; slug = $match.Slug
         poster = $null; still = $null; rating = $null; runtime = $null
         seances = New-Object System.Collections.ArrayList
+        exact = $false
       }
     }
+    $entry = $results[$key]
+    if ($kind -eq 'exact' -and -not $entry.exact) {
+      # La fiche dont le titre correspond exactement à Letterboxd donne le titre affiché
+      $entry.exact = $true; $entry.id = $mv.id; $entry.title = $mv.title; $entry.original = $mv.original_title
+    }
     foreach ($th in $theaters) {
-      $times = [object[]]@($th.seances.PSObject.Properties | ForEach-Object { [double]$_.Value.time } | Sort-Object)
-      [void]$results[$mv.id].seances.Add([ordered]@{
+      $times = @($th.seances.PSObject.Properties | ForEach-Object { [double]$_.Value.time })
+      $same = $entry.seances | Where-Object { $_.date -eq $iso -and $_.theater -eq $th.name } | Select-Object -First 1
+      if ($same) { $same.times = [object[]]@(($same.times + $times) | Sort-Object -Unique); continue }
+      [void]$entry.seances.Add([ordered]@{
         date = $iso; theater = $th.name; zip = $th.zipcode; bank = $th.neighborhood
-        address = (Get-Address $th); times = $times; ics = $null })
+        address = (Get-Address $th); times = [object[]]@($times | Sort-Object -Unique); ics = $null })
     }
   }
 }
 
-# --- 3. Infos Letterboxd (affiche, note, durée) ---------------------------
-foreach ($f in $results.Values) {
+# --- 3. Infos Letterboxd (affiche, note, durée) + vérification du réalisateur ----
+# Noms de famille normalisés d'une liste de réalisateurs ("Jan Komasa, X Y" -> komasa, y)
+function Get-Surnames([string[]]$names) {
+  @($names | ForEach-Object { $_ -split '\s*,\s*|\s+(?:et|and|&)\s+' } | Where-Object { $_ } |
+    ForEach-Object { $w = @(Get-Words $_); if ($w) { $w[-1] } })
+}
+$rejected = @()
+foreach ($f in @($results.Values)) {
   # L'affiche est dans les données structurées (JSON-LD) de la fiche Letterboxd ; 3 essais en cas d'erreur réseau
+  $lbDirectors = @()
   for ($try = 1; $try -le 3 -and -not $f.poster; $try++) {
     try {
       $h = Get-Utf8 "https://letterboxd.com/film/$($f.slug)/"
       if ($h -match '"image":"(https://a\.ltrbxd\.com/resized/[^"]+)"') { $f.poster = $Matches[1] }
       if ($h -match '"ratingValue":([0-9.]+)') { $f.rating = [double]$Matches[1] }
       if ($h -match '(\d+)&nbsp;mins') { $f.runtime = [int]$Matches[1] }
+      if ($h -match '"director":\[(.*?)\]') {
+        $lbDirectors = @([regex]::Matches($Matches[1], '"name":"([^"]+)"') | ForEach-Object { [regex]::Unescape($_.Groups[1].Value) })
+      }
     } catch { Write-Host "Letterboxd indisponible pour $($f.slug) (essai $try)" }
     if (-not $f.poster) { Start-Sleep -Seconds (2 * $try) }
+  }
+  # Correspondance approximative (article/sous-titre) : on vérifie le réalisateur pour éviter les homonymes
+  # (ex. "The Good Boy" de Komasa ≠ "Good Boy" de Leonberg). Translittérations tolérées (4 premières lettres).
+  $rp = Get-Surnames @($f.directors); $lb = Get-Surnames $lbDirectors
+  $pre = { param($n) if ($n.Length -gt 4) { $n.Substring(0, 4) } else { $n } }
+  $lbPre = @($lb | ForEach-Object { & $pre $_ })
+  if (-not $f.exact -and $rp -and $lb -and -not ($rp | Where-Object { $lbPre -contains (& $pre $_) })) {
+    Write-Host "Écarté : $($f.title) ($($f.directors)) ≠ watchlist $($f.slug) ($($lbDirectors -join ', '))"
+    $rejected += $f.slug; continue
   }
   # Dernier recours : la photo du film utilisée par le Rétro Projecteur
   if (-not $f.poster) {
@@ -134,6 +227,7 @@ foreach ($f in $results.Values) {
   }
   Start-Sleep -Milliseconds 300
 }
+foreach ($s in $rejected) { $results.Remove($s) }
 
 # --- 4. Un fichier calendrier (.ics) par séance --------------------------------
 # Toucher une séance sur la page ouvre ce fichier : l'iPhone propose alors "Ajouter au calendrier".
