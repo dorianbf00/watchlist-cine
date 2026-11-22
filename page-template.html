@@ -105,6 +105,20 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
 .more { background: none; border: 0; padding: 6px 0 0; color: var(--gray); font-weight: 600; font-size: 12.5px; text-transform: uppercase; text-decoration: underline; }
 .film:not(.expanded) .th.extra { display: none; }
 .film.expanded .more { display: none; }
+/* Section "Aussi à l'affiche" : plus compacte, sans affiche, rayures bleu pâle */
+.others-head { background: var(--blue); color: #030303; padding: 10px 12px 9px; margin-top: 8px; }
+.others-head h2 { margin: 0; font-size: 22px; line-height: 1; color: #3a3a3d; }
+.others-head p { margin: 4px 0 0; font-size: 12px; text-transform: uppercase; font-weight: 500; color: #3a3a3d; }
+.film.other { grid-template-columns: 1fr; }
+.film.other:nth-child(odd) { background: var(--blue-pale); }
+.film.other h2 { font-size: 15px; }
+.film.other .badges { margin-bottom: 4px; }
+.film.other .meta { margin-top: 3px; }
+.film.other .th { padding: 7px 0 6px; }
+.film.other .times { margin-top: 5px; }
+.film.other .meta a { color: var(--gray); }
+@media (min-width: 860px) { .film.other { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 859px) { .film.other .seances { margin-top: 0; } }
 .empty { text-align: center; color: var(--gray); padding: 48px 12px; }
 .empty b { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 28px; text-transform: uppercase; margin-bottom: 4px; }
 footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding: 0 0 calc(28px + env(safe-area-inset-bottom)); }
@@ -133,6 +147,7 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
 <main class="wrap">
   <div class="cols"><span>Films</span><span>Séances</span></div>
   <div class="list" id="list"></div>
+  <section id="others" aria-label="Autres films à l'affiche"></section>
 </main>
 <footer class="wrap" id="foot"></footer>
 
@@ -165,8 +180,11 @@ films.forEach((f) => { f.total = f.seances.reduce((n, s) => n + s.times.length, 
 
 function isPast(iso, t) { const [h, m] = hm(t); const d = parseDay(iso); d.setHours(h, m); return d < new Date(); }
 
-function filmsFor(iso) {
-  return films.map((f) => ({ f, seances: f.seances.filter((s) => s.date === iso && (state.bank === 'all' || s.bank === state.bank)) }))
+const others = DATA.others || [];
+others.forEach((f) => { f.total = f.seances.reduce((n, s) => n + s.times.length, 0); });
+
+function filmsFor(iso, src = films) {
+  return src.map((f) => ({ f, seances: f.seances.filter((s) => s.date === iso && (state.bank === 'all' || s.bank === state.bank)) }))
     .filter(({ f, seances }) => seances.length && (!state.classics || (f.year && f.year <= thisYear - 2)))
     .map((x) => { const up = x.seances.flatMap((s) => s.times.filter((t) => !isPast(iso, t))); x.next = up.length ? Math.min(...up) : 99; return x; })
     .sort((a, b) => a.next - b.next);
@@ -188,38 +206,47 @@ function renderDays() {
 
 function renderList() {
   const list = filmsFor(state.day);
-  if (!list.length) {
-    $('#list').innerHTML = `<div class="empty"><b>Relâche</b>Aucun film de ta watchlist ce jour-là${state.bank !== 'all' || state.classics ? ' avec ces filtres' : ''}.</div>`;
-    return;
-  }
-  $('#list').innerHTML = list.map(({ f, seances }) => {
+  $('#list').innerHTML = list.length ? list.map((x) => card(x, false)).join('')
+    : `<div class="empty"><b>Relâche</b>Aucun film de ta watchlist ce jour-là${state.bank !== 'all' || state.classics ? ' avec ces filtres' : ''}.</div>`;
+
+  // Autres films : ressorties d'abord (par année, comme le calendrier du Rétro Projecteur), puis nouveautés
+  const rest = filmsFor(state.day, others).filter((x) => x.next !== 99).sort((a, b) => (a.f.year || 9999) - (b.f.year || 9999) || a.f.title.localeCompare(b.f.title, 'fr'));
+  $('#others').innerHTML = rest.length ? `
+    <div class="others-head"><h2 class="display">Aussi à l'affiche</h2>
+      <p>${rest.length} autre${rest.length > 1 ? 's' : ''} film${rest.length > 1 ? 's' : ''} hors de ta watchlist · cinémas carte UGC</p></div>
+    <div class="list others-list">${rest.map((x) => card(x, true)).join('')}</div>` : '';
+}
+
+function card({ f, seances }, compact) {
     const badges = [];
-    if (f.total === 1) badges.push('<span class="badge hot">Séance unique</span>');
-    else if (f.total <= 3) badges.push('<span class="badge hot">Rare</span>');
+    if (!compact) {
+      if (f.total === 1) badges.push('<span class="badge hot">Séance unique</span>');
+      else if (f.total <= 3) badges.push('<span class="badge hot">Rare</span>');
+    }
     badges.push(`<span class="badge">${f.year && f.year <= thisYear - 2 ? 'Ressortie' : 'Nouveauté'}</span>`);
     const meta = [f.runtime ? `${f.runtime} min` : null, f.countries ? esc(f.countries.split(/,\s*/).slice(0, 2).join(', ') + (f.countries.split(',').length > 2 ? '…' : '')) : null, f.rating ? `★ ${f.rating.toFixed(1).replace('.', ',')}` : null].filter(Boolean).join(' · ');
     const initials = esc((f.title || '?').split(/\s+/).slice(0, 2).map((w) => w[0]).join(''));
     const nextOf = (s) => Math.min(...s.times.filter((t) => !isPast(s.date, t)), 99);
     const sorted = [...seances].sort((a, b) => nextOf(a) - nextOf(b) || Math.min(...a.times) - Math.min(...b.times));
-    const MAX = 3, extra = sorted.length - MAX;
+    const MAX = compact ? 2 : 3, extra = sorted.length - MAX;
     const ths = sorted.map((s, i) => `
       <div class="th${i >= MAX ? ' extra' : ''}">
         <button class="th-name" data-map="${esc(s.theater)}|${esc(s.address || s.zip)}">${esc(s.theater)} (${arr(s.zip)})${s.address ? `<span class="addr">${esc(s.address)}</span>` : ''}</button>
         <div class="times">${s.times.map((t, k) => `<a class="t${isPast(s.date, t) ? ' past' : ''}" href="ics/${encodeURIComponent((s.ics || [])[k] || '')}" target="_blank" rel="noopener" aria-label="Ajouter ${esc(f.title)} à ${fmtTime(t)} à mon calendrier">${cal}${fmtTime(t)}</a>`).join('')}</div>
       </div>`).join('') + (extra > 0 ? `<button class="more">+ ${extra} autre${extra > 1 ? 's' : ''} salle${extra > 1 ? 's' : ''}</button>` : '');
-    return `<article class="film">
-      <a class="poster" href="https://letterboxd.com/film/${esc(f.slug)}/" target="_blank" rel="noopener" aria-label="${esc(f.title)} sur Letterboxd">
+    const lb = f.slug ? `https://letterboxd.com/film/${esc(f.slug)}/` : `https://letterboxd.com/search/films/${encodeURIComponent(f.original || f.title)}/`;
+    return `<article class="film${compact ? ' other' : ''}">
+      ${compact ? '' : `<a class="poster" href="${lb}" target="_blank" rel="noopener" aria-label="${esc(f.title)} sur Letterboxd">
         <span class="ph">${initials}</span>${(f.poster || f.still) ? `<img src="${esc(f.poster || f.still)}" alt="" loading="lazy" referrerpolicy="no-referrer" ${f.poster && f.still ? `data-still="${esc(f.still)}"` : ''} onerror="if(this.dataset.still){this.src=this.dataset.still;delete this.dataset.still}else{this.remove()}">` : ''}
-      </a>
+      </a>`}
       <div>
         <div class="badges">${badges.join('')}</div>
         <h2><a href="https://leretroprojecteur.com/film/${esc(f.id)}" target="_blank" rel="noopener"><i>${esc(f.title)}</i>, ${esc(f.directors)} (${f.year || '?'})</a></h2>
-        ${f.original && f.original.toLowerCase() !== f.title.toLowerCase() ? `<p class="orig">${esc(f.original)}</p>` : ''}
-        ${meta ? `<p class="meta">${meta}</p>` : ''}
+        ${!compact && f.original && f.original.toLowerCase() !== f.title.toLowerCase() ? `<p class="orig">${esc(f.original)}</p>` : ''}
+        ${compact ? `<p class="meta">${meta ? meta + ' · ' : ''}<a href="${lb}" target="_blank" rel="noopener">Letterboxd ↗</a></p>` : (meta ? `<p class="meta">${meta}</p>` : '')}
       </div>
       <div class="seances">${ths}</div>
     </article>`;
-  }).join('');
 }
 
 const cal = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="5" width="18" height="16"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>';

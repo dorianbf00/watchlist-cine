@@ -128,7 +128,19 @@ function Test-Theater($th) {
   return ($n.StartsWith('ugc') -or $n.StartsWith('mk2') -or $ugcList.ContainsKey($n))
 }
 
-$results = [ordered]@{}
+function Add-Seances($entry, $theaters, [string]$iso) {
+  foreach ($th in $theaters) {
+    $times = @($th.seances.PSObject.Properties | ForEach-Object { [double]$_.Value.time })
+    $same = $entry.seances | Where-Object { $_.date -eq $iso -and $_.theater -eq $th.name } | Select-Object -First 1
+    if ($same) { $same.times = [object[]]@(($same.times + $times) | Sort-Object -Unique); continue }
+    [void]$entry.seances.Add([ordered]@{
+      date = $iso; theater = $th.name; zip = $th.zipcode; bank = $th.neighborhood
+      address = (Get-Address $th); times = [object[]]@($times | Sort-Object -Unique); ics = $null })
+  }
+}
+
+$results = [ordered]@{}   # films de la watchlist
+$others = [ordered]@{}    # autres films à l'affiche dans les mêmes salles
 $today = (Get-Date).Date
 $dayList = @()
 for ($i = 0; $i -lt $Days; $i++) {
@@ -155,34 +167,31 @@ for ($i = 0; $i -lt $Days; $i++) {
       }
       if ($kind -eq 'exact') { break }
     }
-    if (-not $match) { continue }
     $theaters = @($mv.showtimes_theater | Where-Object { Test-Theater $_ })
     if (-not $theaters) { continue }
 
-    # Une seule carte par film Letterboxd : le Rétro Projecteur a parfois 2 fiches pour le même film
-    $key = $match.Slug
-    if (-not $results.Contains($key)) {
-      $results[$key] = [ordered]@{
+    if ($match) {
+      # Une seule carte par film Letterboxd : le Rétro Projecteur a parfois 2 fiches pour le même film
+      $coll = $results; $key = $match.Slug
+    } else {
+      # Pas dans la watchlist -> section "Aussi à l'affiche" en bas de la page
+      $coll = $others; $key = "rp:$($mv.id)"
+    }
+    if (-not $coll.Contains($key)) {
+      $coll[$key] = [ordered]@{
         id = $mv.id; title = $mv.title; original = $mv.original_title; year = $mv.year
-        directors = $mv.directors; countries = $mv.countries; slug = $match.Slug
+        directors = $mv.directors; countries = $mv.countries; slug = if ($match) { $match.Slug } else { $null }
         poster = $null; still = $null; rating = $null; runtime = $null
         seances = New-Object System.Collections.ArrayList
         exact = $false
       }
     }
-    $entry = $results[$key]
+    $entry = $coll[$key]
     if ($kind -eq 'exact' -and -not $entry.exact) {
       # La fiche dont le titre correspond exactement à Letterboxd donne le titre affiché
       $entry.exact = $true; $entry.id = $mv.id; $entry.title = $mv.title; $entry.original = $mv.original_title
     }
-    foreach ($th in $theaters) {
-      $times = @($th.seances.PSObject.Properties | ForEach-Object { [double]$_.Value.time })
-      $same = $entry.seances | Where-Object { $_.date -eq $iso -and $_.theater -eq $th.name } | Select-Object -First 1
-      if ($same) { $same.times = [object[]]@(($same.times + $times) | Sort-Object -Unique); continue }
-      [void]$entry.seances.Add([ordered]@{
-        date = $iso; theater = $th.name; zip = $th.zipcode; bank = $th.neighborhood
-        address = (Get-Address $th); times = [object[]]@($times | Sort-Object -Unique); ics = $null })
-    }
+    Add-Seances $entry $theaters $iso
   }
 }
 
@@ -227,13 +236,20 @@ foreach ($f in @($results.Values)) {
   }
   Start-Sleep -Milliseconds 300
 }
-foreach ($s in $rejected) { $results.Remove($s) }
+# Les films écartés (homonymes) rejoignent les "autres films"
+foreach ($s in $rejected) {
+  $f = $results[$s]; $results.Remove($s)
+  $f.slug = $null; $f.poster = $null; $f.rating = $null; $f.runtime = $null
+  if (-not $others.Contains("rp:$($f.id)")) { $others["rp:$($f.id)"] = $f }
+}
+Write-Host "Autres films à l'affiche (hors watchlist) : $($others.Count)"
 
 # --- 4. Un fichier calendrier (.ics) par séance --------------------------------
 # Toucher une séance sur la page ouvre ce fichier : l'iPhone propose alors "Ajouter au calendrier".
 function Esc-Ics([string]$s) { ($s -replace '\\', '\\' -replace ';', '\;' -replace ',', '\,' -replace "`r?`n", '\n') }
 function Fold-Ics([string]$line) {
   # Lignes de 75 octets max (norme iCalendar), coupées sans casser les caractères accentués
+  if ([Text.Encoding]::UTF8.GetByteCount($line) -le 73) { return $line }
   $out = New-Object Text.StringBuilder; $cur = ''
   foreach ($ch in $line.ToCharArray()) {
     if ([Text.Encoding]::UTF8.GetByteCount($cur + $ch) -gt 73) { [void]$out.Append($cur + "`r`n "); $cur = '' }
@@ -249,7 +265,7 @@ $vtz = @('BEGIN:VTIMEZONE', 'TZID:Europe/Paris',
   'BEGIN:DAYLIGHT', 'TZOFFSETFROM:+0100', 'TZOFFSETTO:+0200', 'TZNAME:CEST', 'DTSTART:19700329T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU', 'END:DAYLIGHT',
   'BEGIN:STANDARD', 'TZOFFSETFROM:+0200', 'TZOFFSETTO:+0100', 'TZNAME:CET', 'DTSTART:19701025T030000', 'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU', 'END:STANDARD',
   'END:VTIMEZONE')
-foreach ($f in $results.Values) {
+foreach ($f in @($results.Values) + @($others.Values)) {
   foreach ($s in $f.seances) {
     $files = @()
     foreach ($t in $s.times) {
@@ -259,7 +275,8 @@ foreach ($f in $results.Values) {
       $end = $start.AddMinutes($dur + 20)   # + ~20 min de pubs/bandes-annonces
       $thSlug = (Normalize $s.theater)
       $name = '{0}-{1}-{2:00}{3:00}-{4}.ics' -f $f.id, $s.date, $h, $m, $thSlug
-      $desc = "$($f.title) ($($f.year)) – $($f.directors)`n$dur min`nhttps://leretroprojecteur.com/film/$($f.id)`nhttps://letterboxd.com/film/$($f.slug)/"
+      $desc = "$($f.title) ($($f.year)) – $($f.directors)" + $(if ($f.runtime) { "`n$dur min" } else { '' }) +
+        "`nhttps://leretroprojecteur.com/film/$($f.id)" + $(if ($f.slug) { "`nhttps://letterboxd.com/film/$($f.slug)/" } else { '' })
       $lines = @('BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//watchlist-cine//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH') + $vtz + @(
         'BEGIN:VEVENT',
         "UID:$($name -replace '\.ics$','')@watchlist-cine",
@@ -285,6 +302,7 @@ $data = [ordered]@{
   user = $User; generated = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
   days = $dayList; watchlistCount = $watch.Count
   films = [object[]]@($results.Values)
+  others = [object[]]@($others.Values)
 }
 $json = ($data | ConvertTo-Json -Depth 8 -Compress) -replace '</', '<\/'
 $template = [IO.File]::ReadAllText((Join-Path $ScriptDir 'page-template.html'), [Text.Encoding]::UTF8)
