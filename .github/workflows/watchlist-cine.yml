@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: "0 8 */3 * *"   # 8h UTC (9h/10h à Paris), les 1, 4, 7, 10… du mois
   workflow_dispatch:         # bouton "Run workflow" pour lancer à la main
+  push:                      # chaque modif du code republie la page (sans notif)
+    branches: [main]
 
 permissions:
   contents: write   # pour le petit commit anti-mise-en-veille
@@ -73,6 +75,7 @@ jobs:
 
   notify:
     needs: deploy
+    if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-latest
     env:
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
