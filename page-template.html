@@ -93,7 +93,7 @@ html.ptr-ready .ptr-hint { color: #fff; }
 .filters { display: flex; gap: 8px; padding: 0 0 10px; overflow-x: auto; scrollbar-width: none; }
 .filters::-webkit-scrollbar { display: none; }
 .chip { flex: none; border: 1px solid var(--line); background: transparent; padding: 6px 12px; font-size: 13px; font-weight: 500; text-transform: uppercase; color: var(--gray); }
-.chip[aria-pressed="true"] { background: var(--blue-pale); color: var(--elec-text); border-color: var(--elec-text); }
+.chip[aria-pressed="true"] { background: var(--lime-grad); color: #030303; border-color: var(--lime-1); }
 
 /* En-têtes de colonnes comme le calendrier du site */
 .cols { display: none; }
@@ -119,7 +119,7 @@ html.ptr-ready .ptr-hint { color: #fff; }
 .poster .ph { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-weight: 900; font-size: 26px; color: var(--gray); }
 .badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
 .badge { font-size: 10.5px; font-weight: 600; text-transform: uppercase; padding: 1px 6px; border: 1px solid var(--line); color: var(--gray); background: var(--bg); }
-.badge.hot { background: var(--elec); border-color: var(--elec); color: var(--on-elec); }
+.badge.hot { background: var(--lime-grad); border-color: var(--lime-1); color: #030303; }
 .film h2 { font-size: 16px; font-weight: 500; line-height: 1.25; margin: 0; }
 .film h2 a { text-decoration: none; }
 .film h2 i { font-style: italic; font-weight: 600; text-transform: uppercase; }
@@ -136,8 +136,10 @@ html.ptr-ready .ptr-hint { color: #fff; }
 .times { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .t { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--bg); padding: 4px 9px; font-weight: 500; font-variant-numeric: tabular-nums; font-size: 14px; min-height: 34px; text-decoration: none; }
 .t svg { width: 12px; height: 12px; color: var(--gray); }
-.t:hover, .t:active { background: var(--elec); border-color: var(--elec); color: var(--on-elec); }
-.t:hover svg, .t:active svg { color: var(--on-elec); }
+.t:hover, .t:active { background: var(--lime-grad); border-color: var(--lime-1); color: #030303; }
+#others .t:hover, #others .t:active { background: var(--elec); border-color: var(--elec); color: var(--on-elec); }
+.t:hover svg, .t:active svg { color: #030303; }
+#others .t:hover svg, #others .t:active svg { color: var(--on-elec); }
 .t.past { color: var(--gray-t); border-color: var(--gray-t); text-decoration: line-through; }
 .more { background: none; border: 0; padding: 6px 0 0; color: var(--gray); font-weight: 600; font-size: 12.5px; text-transform: uppercase; text-decoration: underline; }
 .film:not(.expanded) .th.extra { display: none; }
@@ -158,7 +160,7 @@ html.ptr-ready .ptr-hint { color: #fff; }
 /* Fausse affiche quand aucune image n'existe : style Rétro Projecteur */
 .tile .ph-title { display: flex; flex-direction: column; justify-content: space-between; align-items: stretch; gap: 6px;
   background: #fff; color: #030303; border: 1px solid #6a6a6d; padding: 0 0 8px; text-align: center; overflow: hidden; }
-.tile .pt-band { background: var(--lime-grad); color: #6a6a6d; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 15px; padding: 4px 0 2px; }
+.tile .pt-band { background: var(--elec-grad); color: #fff; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 15px; padding: 4px 0 2px; }
 .tile .pt-name { font-family: var(--display); font-weight: 900; font-stretch: 105%; text-transform: uppercase; font-size: 14px; line-height: 1.05;
   padding: 0 6px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .tile .pt-dir { font-size: 10px; color: #6a6a6d; text-transform: uppercase; padding: 0 6px; line-height: 1.2;
@@ -167,19 +169,19 @@ html.ptr-ready .ptr-hint { color: #fff; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tile .ty { font-size: 11px; color: var(--gray); margin-top: -2px; }
 /* Groupes "Déjà vus / Pour toi / Le reste" et badges sur les affiches */
-.ogroup { margin-top: 18px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
-.ogroup h3 { margin: 0; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 18px; text-transform: uppercase; color: var(--gray); }
-.ogroup h3 span { font-family: var(--sans); font-size: 12px; font-weight: 600; background: var(--hair); color: var(--ink); padding: 1px 7px; vertical-align: 3px; margin-left: 4px; }
+.ogroup { margin-top: 18px; border-bottom: 1px solid var(--elec-text); padding-bottom: 6px; }
+.ogroup h3 { margin: 0; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 18px; text-transform: uppercase; color: var(--elec-text); }
+.ogroup h3 span { font-family: var(--sans); font-size: 12px; font-weight: 600; background: var(--blue-pale); color: var(--elec-text); padding: 1px 7px; vertical-align: 3px; margin-left: 4px; }
 .ogroup p { margin: 2px 0 0; font-size: 12px; color: var(--gray); text-transform: uppercase; }
 .ogroup + .pgrid { padding-top: 10px; }
 .pbadge { position: absolute; z-index: 2; left: 4px; top: 4px; font-size: 10.5px; font-weight: 700; padding: 2px 5px; text-transform: uppercase;
   font-variant-numeric: tabular-nums; box-shadow: 0 1px 3px #0004; letter-spacing: .02em; }
-.pbadge.seen { background: var(--lime-grad); color: #030303; }
+.pbadge.seen { background: var(--elec); color: #fff; }
 .pbadge.match { background: #fff; color: #0033FF; border: 1px solid #0033FF; }
-.pbadge.match.hot { background: var(--elec); border-color: var(--elec); color: var(--on-elec); }
+.pbadge.match.hot { background: #DCE3FF; border-color: #0033FF; color: #0033FF; }
 .detail .taste { margin: 6px 0 0; font-size: 13px; }
 .detail .taste b { font-weight: 700; }
-.detail .taste.seen b { background: var(--lime-grad); color: #030303; padding: 0 4px; }
+.detail .taste.seen b { background: var(--elec); color: #fff; padding: 0 4px; }
 .detail { grid-column: 1 / -1; background: var(--blue-pale); border: 1px solid var(--line); padding: 12px; }
 .detail-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
 .detail h3 { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.25; }
@@ -250,7 +252,6 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
 <div class="ptr-hint" id="ptr-hint" aria-hidden="true">Tire pour actualiser</div>
 <div id="app">
 <header class="masthead wrap">
-  <div class="kicker"><span>Letterboxd</span><a href="https://leretroprojecteur.com/" target="_blank" rel="noopener">Séances : Rétro Projecteur</a></div>
   <h1 class="logo-wrap"><span class="sr">Watchlist</span>
     <svg class="logo" id="logo" aria-hidden="true" viewBox="0 0 96.774 75"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></svg>
   </h1>
