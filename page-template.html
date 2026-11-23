@@ -8,9 +8,10 @@
 <meta name="theme-color" content="#030303" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ciné">
-<link rel="icon" type="image/png" href="favicon.png">
-<link rel="apple-touch-icon" href="icon-180.png">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png?v=2">
+<link rel="manifest" href="manifest.webmanifest?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Inter:ital,wght@0,400;0,500;0,600;1,600&display=swap" rel="stylesheet">
@@ -40,6 +41,22 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
 .masthead { padding-top: calc(16px + env(safe-area-inset-top)); }
 .kicker { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; font-weight: 500; color: var(--gray); text-transform: uppercase; letter-spacing: .02em; padding-bottom: 10px; }
 .kicker a { text-decoration: none; border-bottom: 1px solid currentColor; }
+/* Logo W au centre (remplace le bandeau "WATCHLIST") */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.logo-wrap { margin: 6px 0 2px; display: flex; justify-content: center; perspective: 700px; }
+.logo { width: 116px; height: auto; display: block; transform-style: preserve-3d; will-change: transform;
+  filter: drop-shadow(0 1px 0 #6a6a6d55) drop-shadow(0 8px 16px #b5d40040); }
+/* Tirer pour actualiser */
+html, body { overscroll-behavior-y: none; }
+:root { --pull: 0px; }
+.masthead, .bar, main, footer { transform: translateY(var(--pull)); }
+html.ptr-release .masthead, html.ptr-release .bar, html.ptr-release main, html.ptr-release footer { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
+html.ptr-release .logo { transition: transform .7s cubic-bezier(.2, .8, .2, 1); }
+html.ptr-busy .logo { transition: transform 1s cubic-bezier(.35, .1, .25, 1); }
+.ptr-hint { position: fixed; z-index: 4; top: calc(env(safe-area-inset-top) + 12px); left: 0; right: 0; text-align: center; pointer-events: none;
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--gray); opacity: 0; transition: opacity .2s; }
+html.ptr-pulling .ptr-hint { opacity: 1; }
+html.ptr-ready .ptr-hint { color: var(--ink); }
 .title { background: var(--green); color: var(--on-green); text-align: center; margin: 0; padding: 8px 10px 4px;
   font-size: clamp(34px, 11vw, 76px); line-height: 1; }
 .sub { text-align: center; color: var(--gray); font-size: 14px; font-weight: 500; text-transform: uppercase; margin: 10px 0 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
@@ -173,7 +190,8 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
   :root { --ease: cubic-bezier(.2, .75, .2, 1); --spring: cubic-bezier(.34, 1.56, .64, 1); }
 
   /* Ouverture : le titre se dévoile, le reste suit */
-  .title { animation: wipe .9s var(--ease) both; }
+  .logo { animation: logoIn 1.1s var(--ease) backwards; }
+  @keyframes logoIn { 0% { opacity: 0; transform: translateY(-12px) rotateY(-180deg) scale(.85); } 60% { opacity: 1; } 100% { transform: none; } }
   .kicker, .sub { animation: rise .7s var(--ease) both; }
   .sub { animation-delay: .25s; }
   .bar { animation: rise .7s .35s var(--ease) both; }
@@ -216,9 +234,12 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
 </style>
 </head>
 <body>
+<div class="ptr-hint" id="ptr-hint" aria-hidden="true">Tire pour actualiser</div>
 <header class="masthead wrap">
   <div class="kicker"><span>Letterboxd</span><a href="https://leretroprojecteur.com/" target="_blank" rel="noopener">Séances : Rétro Projecteur</a></div>
-  <h1 class="title display">Watchlist</h1>
+  <h1 class="logo-wrap"><span class="sr">Watchlist</span>
+    <svg class="logo" id="logo" viewBox="0 0 97 75" aria-hidden="true"><g fill="#E2FF01"><rect x="0" y="0" width="19.4" height="50"/><rect x="38.8" y="0" width="19.4" height="50"/><rect x="77.6" y="0" width="19.4" height="50"/><rect x="19.4" y="50" width="19.4" height="25"/><rect x="58.2" y="50" width="19.4" height="25"/></g></svg>
+  </h1>
   <p class="sub" id="sub"></p>
 </header>
 
@@ -516,6 +537,60 @@ $('#others-toggle').setAttribute('aria-pressed', state.showOthers);
 let saved = null; try { saved = sessionStorage.getItem('day'); } catch {}
 state.day = DAYS.includes(saved) ? saved : DAYS.includes(todayIso) ? todayIso : DAYS[0];
 render();
+
+// --- Tirer pour actualiser : la page descend, le W tourne au rythme du doigt ----------
+(() => {
+  const root = document.documentElement, logo = $('#logo'), hint = $('#ptr-hint');
+  const TH = 80;                       // distance (après résistance) pour déclencher l'actualisation
+  let y0 = null, pull = 0, active = false;
+  const set = (p, deg) => { root.style.setProperty('--pull', `${p}px`); logo.style.transform = `rotateY(${deg}deg)`; };
+  const reset = () => {
+    root.classList.remove('ptr-release', 'ptr-ready', 'ptr-pulling');
+    root.style.removeProperty('--pull'); logo.style.transform = '';
+  };
+  addEventListener('touchstart', (e) => {
+    if (scrollY > 0 || e.touches.length > 1 || root.classList.contains('ptr-busy')) return;
+    y0 = e.touches[0].clientY; active = false; pull = 0;
+    root.classList.remove('ptr-release');
+  }, { passive: true });
+  addEventListener('touchmove', (e) => {
+    if (y0 == null) return;
+    const dy = e.touches[0].clientY - y0;
+    if (!active && (dy <= 4 || scrollY > 0)) { if (dy < 0) y0 = null; return; }
+    active = true;
+    if (e.cancelable) e.preventDefault();             // on garde la main sur le geste
+    pull = Math.max(0, Math.min(140, dy * 0.5));      // résistance élastique
+    set(pull, (pull / TH) * 360);                     // un tour complet au seuil
+    root.classList.add('ptr-pulling');
+    const ready = pull >= TH;
+    if (ready !== root.classList.contains('ptr-ready')) {
+      root.classList.toggle('ptr-ready', ready);
+      hint.textContent = ready ? 'Relâche pour actualiser' : 'Tire pour actualiser';
+    }
+  }, { passive: false });
+  const end = () => {
+    if (y0 == null) return;
+    y0 = null;
+    if (!active) return;
+    const deg = (pull / TH) * 360;
+    root.classList.add('ptr-release');
+    if (pull >= TH) {
+      // Actualisation : le W enchaîne deux tours en restant un peu descendu, puis la page se recharge
+      root.classList.add('ptr-busy');
+      hint.textContent = 'Actualisation…';
+      set(58, deg + 720);
+      setTimeout(() => location.reload(), 700);
+    } else {
+      // Relâché trop tôt : le W finit son tour (comme une toupie) en remontant
+      root.classList.remove('ptr-pulling');
+      set(0, Math.ceil(deg / 360) * 360);
+      setTimeout(reset, 720);
+    }
+    pull = 0; active = false;
+  };
+  addEventListener('touchend', end);
+  addEventListener('touchcancel', end);
+})();
 </script>
 </body>
 </html>

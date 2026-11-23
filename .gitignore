@@ -8,3 +8,6 @@ serve.ps1
 /favicon.png
 /manifest.webmanifest
 /lb-cache.json
+/favicon*.png
+/favicon.svg
+/logo.svg
