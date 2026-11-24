@@ -31,7 +31,8 @@ mk2 Quai de Seine | 14 quai de la Seine, 75019 Paris
 mk2 Gambetta | 6 rue Belgrand, 75020 Paris
 
 # --- Cinémas partenaires ---
-Le Grand Rex | 1 boulevard Poissonnière, 75002 Paris
+# Exclu à la demande de Dorian (24/11/2026) : ne jamais afficher ses séances
+# Le Grand Rex | 1 boulevard Poissonnière, 75002 Paris
 Luminor Hôtel de Ville | 20 rue du Temple, 75004 Paris
 Cinéma du Panthéon | 13 rue Victor Cousin, 75005 Paris
 Écoles Cinéma Club | 25 rue des Écoles, 75005 Paris
