@@ -639,6 +639,112 @@ foreach ($f in @($others.Values)) {
   if ($twin) { $f.poster = $twin.poster; $f.still = $twin.still; if (-not $f.slug) { $f.slug = $twin.slug } }
 }
 
+# --- 3e. Fiche film : synopsis, sortie, durée, casting (Rétro Projecteur) + Rotten Tomatoes ----------
+# Cache permanent film-info.json (clé = id Rétro Projecteur) : une fiche ne change pas. Rotten Tomatoes
+# est relu au bout de 30 jours (scores qui bougent pour les nouveautés). Temps limité par passage :
+# les fiches manquantes sont complétées aux passages suivants (garde le "tirer pour actualiser" rapide).
+$infoPath = Join-Path (Split-Path $cachePath -Parent) 'film-info.json'
+$infoCache = @{}
+if (Test-Path $infoPath) {
+  try { (Get-Content $infoPath -Raw -Encoding UTF8 | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $infoCache[$_.Name] = $_.Value } } catch {}
+}
+# Le Rétro Projecteur (Next.js) range les données du film dans des morceaux self.__next_f.push([1,"..."]) :
+# on les décode (chaînes JSON) puis on y lit les champs du film.
+function Get-RscText([string]$raw) {
+  $sb = New-Object Text.StringBuilder
+  foreach ($m in [regex]::Matches($raw, 'self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)')) {
+    try { [void]$sb.Append([string](('"' + $m.Groups[1].Value + '"') | ConvertFrom-Json)) } catch {}
+  }
+  $sb.ToString()
+}
+function Get-JsonStr([string]$txt, [string]$name) {
+  $m = [regex]::Match($txt, '"' + $name + '":"((?:[^"\\]|\\.)*)"')
+  if ($m.Success) { try { return [string](('"' + $m.Groups[1].Value + '"') | ConvertFrom-Json) } catch {} }
+  $null
+}
+function Get-JsonNames([string]$txt, [string]$name) {
+  # "actors":"A, B, C"  ou  "actors":["A","B"]  ou  "actors":[{"name":"A"},…]
+  $s = Get-JsonStr $txt $name
+  if ($s) { return @($s -split '\s*,\s*' | Where-Object { $_ }) }
+  $m = [regex]::Match($txt, '"' + $name + '":\[(.*?)\]')
+  if (-not $m.Success) { return @() }
+  @([regex]::Matches($m.Groups[1].Value, '"(?:name":")?((?:[^"\\]|\\.)+)"') | ForEach-Object { $_.Groups[1].Value } |
+    Where-Object { $_ -ne 'name' -and $_ -notmatch '^\d+$' })
+}
+function Read-RpInfo($f) {
+  $o = [ordered]@{ syn = $null; cast = @(); rel = $null; dur = $null; genre = $null }
+  try { $raw = Get-Utf8 "https://leretroprojecteur.com/film/$($f.id)" } catch { return $null }
+  $txt = Get-RscText $raw
+  if (-not $txt) { $txt = $raw -replace '\\"', '"' }
+  $o.syn = Get-JsonStr $txt 'overview'
+  if (-not $o.syn -and $raw -match '<meta name="description" content="([^"]{60,})"') { $o.syn = [Net.WebUtility]::HtmlDecode($Matches[1]) }
+  if ($o.syn) { $o.syn = ($o.syn -replace '\s+', ' ').Trim() }
+  $o.cast = @(Get-JsonNames $txt 'actors' | Select-Object -First 5)
+  $r = Get-JsonStr $txt 'release_date'; if ($r -match '^(\d{4}-\d{2}-\d{2})') { $o.rel = $Matches[1] }
+  $m = [regex]::Match($txt, '"duration":"?(\d+)'); if ($m.Success) { $d = [int]$m.Groups[1].Value; $o.dur = if ($d -gt 400) { [int][math]::Round($d / 60) } else { $d } }
+  $g = Get-JsonNames $txt 'genre'; if (-not $g) { $g = Get-JsonNames $txt 'genres' }
+  if ($g) { $o.genre = ($g | Select-Object -First 3) -join ', ' }
+  [pscustomobject]$o
+}
+function Get-RtSlug([string]$s) {
+  if (-not $s) { return $null }
+  $d = $s.Normalize([Text.NormalizationForm]::FormD)
+  $sb = New-Object Text.StringBuilder
+  foreach ($c in $d.ToCharArray()) { if ([Globalization.CharUnicodeInfo]::GetUnicodeCategory($c) -ne 'NonSpacingMark') { [void]$sb.Append($c) } }
+  (($sb.ToString().ToLower() -replace "['’.]", '' -replace '&', 'and' -replace '[^a-z0-9]+', '_').Trim('_'))
+}
+# Rotten Tomatoes : adresse devinée (titre original, puis slug Letterboxd), année vérifiée à ±1 an
+function Find-RottenTomatoes($f) {
+  $bases = @((Get-RtSlug $f.original), (Get-RtSlug $f.title)) + @(if ($f.slug) { ($f.slug -replace '-\d{4}$', '') -replace '-', '_' }) |
+    Where-Object { $_ -and $_.Length -ge 2 } | Select-Object -Unique
+  $tried = @{}
+  foreach ($b in $bases) {
+    foreach ($c in @(if ($f.year) { "${b}_$($f.year)" }) + @($b)) {
+      if ($tried[$c]) { continue }; $tried[$c] = 1
+      try { $p = Get-Utf8 "https://www.rottentomatoes.com/m/$c" } catch { Start-Sleep -Milliseconds 150; continue }
+      $y = 0
+      if ($p -match '"dateCreated":"(\d{4})') { $y = [int]$Matches[1] }
+      elseif ($p -match '<title>[^<]*\((\d{4})\)') { $y = [int]$Matches[1] }
+      if (-not $f.year -or -not $y -or [math]::Abs($y - [int]$f.year) -gt 1) { continue }
+      $o = [ordered]@{ url = "https://www.rottentomatoes.com/m/$c"; c = $null; a = $null; fresh = $false }
+      if ($p -match '"aggregateRating":\{[^}]*"ratingValue":"?(\d+)') { $o.c = [int]$Matches[1] }
+      if ($p -match '"audienceScore":\{[^}]*"scorePercent":"(\d+)%') { $o.a = [int]$Matches[1] }
+      if ($p -match '"criticsScore":\{[^}]*"certified":true') { $o.fresh = $true }
+      return [pscustomobject]$o
+    }
+  }
+  $null
+}
+$infoBudget = [Diagnostics.Stopwatch]::StartNew(); $nInfo = 0; $nRt = 0
+foreach ($f in @($results.Values) + @($others.Values)) {
+  $k = "$($f.id)"
+  $e = $infoCache[$k]
+  if ($infoBudget.Elapsed.TotalSeconds -lt 240) {
+    if (-not $e -or ($e.v -lt 1 -and ($now - [datetime]$e.t).TotalDays -ge 3)) {
+      $rp = Read-RpInfo $f; $nInfo++
+      $e = [pscustomobject]@{ v = if ($rp) { 1 } else { 0 }; t = $now.ToString('yyyy-MM-dd'); rp = $rp; rt = $null; rtAt = $null }
+      $infoCache[$k] = $e
+      Start-Sleep -Milliseconds 200
+    }
+    if ($f.year -and (-not $e.rtAt -or ($now - [datetime]$e.rtAt).TotalDays -ge 30)) {
+      $e.rt = Find-RottenTomatoes $f; $e.rtAt = $now.ToString('yyyy-MM-dd'); $nRt++
+    }
+  }
+  if (-not $e) { continue }
+  if ($e.rp) {
+    $f.syn = $e.rp.syn; $f.cast = [object[]]@($e.rp.cast); $f.rel = $e.rp.rel; $f.genre = $e.rp.genre
+    if (-not $f.runtime -and $e.rp.dur) { $f.runtime = $e.rp.dur }
+  }
+  if ($e.rt) { $f.rt = $e.rt }
+}
+$infoCache.GetEnumerator() | ForEach-Object -Begin { $o = [ordered]@{} } -Process { $o[$_.Key] = $_.Value } -End {
+  [IO.File]::WriteAllText($infoPath, ($o | ConvertTo-Json -Depth 5 -Compress), (New-Object Text.UTF8Encoding($false))) }
+$allF = @($results.Values) + @($others.Values)
+$infoMsg = ("Fiches film : {0} lues, {1} Rotten Tomatoes cherchés · synopsis {2}/{3} · RT {4}/{3}" -f $nInfo, $nRt,
+  @($allF | Where-Object { $_.syn }).Count, $allF.Count, @($allF | Where-Object { $_.rt }).Count)
+Write-Host $infoMsg
+if ($env:GITHUB_ACTIONS) { Write-Host "::notice title=Fiches film::$infoMsg" }
+
 # --- 4. Un fichier calendrier (.ics) par séance --------------------------------
 # Toucher une séance sur la page ouvre ce fichier : l'iPhone propose alors "Ajouter au calendrier".
 function Esc-Ics([string]$s) { ($s -replace '\\', '\\' -replace ';', '\;' -replace ',', '\,' -replace "`r?`n", '\n') }
