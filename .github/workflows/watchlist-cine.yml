@@ -44,6 +44,7 @@ jobs:
             lb-cache.json
             lb-films.json
             taste-data.json
+            film-info.json
           key: lb-cache-${{ github.run_id }}
           restore-keys: lb-cache-
 
