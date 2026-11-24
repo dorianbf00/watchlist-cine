@@ -54,17 +54,17 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
 /* Tirer pour actualiser */
 html, body { overscroll-behavior-y: none; }
 #app { position: relative; z-index: 1; background: var(--bg); }
-/* Le dégradé est étiré (scaleY, sur la carte graphique) pour toujours finir au bord de la page tirée */
-.ptr-sky { position: fixed; z-index: 0; top: 0; left: 0; right: 0; height: 140px; pointer-events: none;
-  transform-origin: top; transform: scaleY(0); will-change: transform;
-  background: linear-gradient(180deg, var(--lime-1), var(--lime-2) 22%, var(--bg));
-  /* fondu en douceur (courbe "ease-out") : aucun palier, aucune ligne visible */
-  background: linear-gradient(in oklab 180deg, var(--lime-1) 0%, var(--lime-2) 22%,
-    color-mix(in oklab, var(--lime-2) 62%, var(--bg)) 46%, color-mix(in oklab, var(--lime-2) 30%, var(--bg)) 66%,
-    color-mix(in oklab, var(--lime-2) 10%, var(--bg)) 84%, var(--bg) 100%); }
+/* Dégradé en arc : un dôme jaune-vert qui descend jusqu'au bord de la page tirée (--g) et dont le vert
+   gagne de la place à mesure qu'on tire (--k). Propriétés enregistrées : elles s'animent au relâchement. */
+@property --g { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --k { syntax: '<number>'; inherits: false; initial-value: 0; }
+.ptr-sky { position: fixed; z-index: 0; top: 0; left: 0; right: 0; height: 220px; pointer-events: none; --g: 0px; --k: 0;
+  background: radial-gradient(ellipse 125% var(--g) at 50% 0, var(--lime-1), var(--lime-2) calc(12% + var(--k) * 48%), var(--bg));
+  background: radial-gradient(ellipse 125% var(--g) at 50% 0 in oklab, var(--lime-1) 0%, var(--lime-2) calc(12% + var(--k) * 48%),
+    color-mix(in oklab, var(--lime-2) 45%, var(--bg)) calc(40% + var(--k) * 38%), var(--bg) 100%); }
+.ptr-sky.ptr-anim { transition: --g .55s cubic-bezier(.2, .8, .2, 1), --k .55s cubic-bezier(.2, .8, .2, 1); }
 /* Micro-particules : un seul canvas, dessiné seulement pendant le geste */
 .ptr-dust { position: fixed; z-index: 0; top: 0; left: 0; width: 100%; height: 200px; pointer-events: none; }
-.ptr-sky.ptr-anim { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
 #app.ptr-live { will-change: transform; }
 /* Pas de bord : le haut de la page se fond dans le dégradé (voile du fond sur 28 px) */
 #app::before { content: ""; position: absolute; left: 0; right: 0; top: -28px; height: 28px; pointer-events: none;
@@ -638,7 +638,8 @@ render();
     if (!next) return;
     const [p, deg] = next; next = null;
     app.style.transform = p ? `translate3d(0, ${p}px, 0)` : '';
-    sky.style.transform = `scaleY(${p / 140})`;   // le dégradé finit pile sur le fond, au bord de la page
+    sky.style.setProperty('--g', `${p}px`);              // le dôme finit pile sur le fond, au bord de la page
+    sky.style.setProperty('--k', Math.min(1, p / 120));  // plus on tire, plus le vert prend de place
     logo.style.transform = deg ? `rotateY(${deg}deg)` : '';
   };
   const set = (p, deg, now) => {
