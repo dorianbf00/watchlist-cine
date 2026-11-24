@@ -59,15 +59,16 @@ html, body { overscroll-behavior-y: none; }
 @property --g { syntax: '<length>'; inherits: false; initial-value: 0px; }
 @property --k { syntax: '<number>'; inherits: false; initial-value: 0; }
 .ptr-sky { position: fixed; z-index: 0; top: 0; left: 0; right: 0; height: 220px; pointer-events: none; --g: 0px; --k: 0;
-  background: radial-gradient(ellipse 125% var(--g) at 50% 0, var(--lime-1), var(--lime-2) calc(12% + var(--k) * 48%), var(--bg));
-  background: radial-gradient(ellipse 125% var(--g) at 50% 0 in oklab, var(--lime-1) 0%, var(--lime-2) calc(12% + var(--k) * 48%),
-    color-mix(in oklab, var(--lime-2) 45%, var(--bg)) calc(40% + var(--k) * 38%), var(--bg) 100%); }
+  /* arc en U : une bulle du fond monte du bord de la page au centre, le vert coule dans les coins */
+  background: radial-gradient(ellipse 62% calc(var(--g) * (1.05 - var(--k) * .4)) at 50% var(--g), var(--bg), var(--lime-2) 85%, var(--lime-1));
+  background: radial-gradient(ellipse 62% calc(var(--g) * (1.05 - var(--k) * .4)) at 50% var(--g) in oklab, var(--bg) 0%,
+    color-mix(in oklab, var(--lime-2) 30%, var(--bg)) 45%, var(--lime-2) calc(100% - var(--k) * 25%), var(--lime-1) 100%); }
 .ptr-sky.ptr-anim { transition: --g .55s cubic-bezier(.2, .8, .2, 1), --k .55s cubic-bezier(.2, .8, .2, 1); }
 /* Micro-particules : un seul canvas, dessiné seulement pendant le geste */
 .ptr-dust { position: fixed; z-index: 0; top: 0; left: 0; width: 100%; height: 200px; pointer-events: none; }
 #app.ptr-live { will-change: transform; }
-/* Pas de bord : le haut de la page se fond dans le dégradé (voile du fond sur 28 px) */
-#app::before { content: ""; position: absolute; left: 0; right: 0; top: -28px; height: 28px; pointer-events: none;
+/* Pas de bord : le haut de la page se fond dans le dégradé (voile du fond sur 36 px) */
+#app::before { content: ""; position: absolute; left: 0; right: 0; top: -36px; height: 36px; pointer-events: none;
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg)); }
 #app.ptr-anim { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
 #app.ptr-anim .logo { transition: transform .7s cubic-bezier(.2, .8, .2, 1); }
