@@ -54,14 +54,22 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
 /* Tirer pour actualiser */
 html, body { overscroll-behavior-y: none; }
 #app { position: relative; z-index: 1; background: var(--bg); }
-/* Le dégradé est étiré (scaleY, sur la carte graphique) pour toujours finir au bord de la page tirée */
-.ptr-sky { position: fixed; z-index: 0; top: 0; left: 0; right: 0; height: 140px; pointer-events: none;
-  transform-origin: top; transform: scaleY(0); will-change: transform;
-  background: linear-gradient(180deg, var(--lime-1), var(--lime-2) 18%, var(--bg));
-  background: linear-gradient(in oklab 180deg, var(--lime-1), var(--lime-2) 18%, color-mix(in oklab, var(--lime-2) 55%, var(--bg)) 55%, var(--bg)); }
-.ptr-sky.ptr-anim { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
+/* Dégradé en arc : un dôme jaune-vert qui descend jusqu'au bord de la page tirée (--g) et dont le vert
+   gagne de la place à mesure qu'on tire (--k). Propriétés enregistrées : elles s'animent au relâchement. */
+@property --g { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --k { syntax: '<number>'; inherits: false; initial-value: 0; }
+.ptr-sky { position: fixed; z-index: 0; top: 0; left: 0; right: 0; height: 220px; pointer-events: none; --g: 0px; --k: 0;
+  /* arc en U : une bulle du fond monte du bord de la page au centre, le vert coule dans les coins */
+  background: radial-gradient(ellipse 62% calc(var(--g) * (1.05 - var(--k) * .4)) at 50% var(--g), var(--bg), var(--lime-2) 85%, var(--lime-1));
+  background: radial-gradient(ellipse 62% calc(var(--g) * (1.05 - var(--k) * .4)) at 50% var(--g) in oklab, var(--bg) 0%,
+    color-mix(in oklab, var(--lime-2) 30%, var(--bg)) 45%, var(--lime-2) calc(100% - var(--k) * 25%), var(--lime-1) 100%); }
+.ptr-sky.ptr-anim { transition: --g .55s cubic-bezier(.2, .8, .2, 1), --k .55s cubic-bezier(.2, .8, .2, 1); }
+/* Micro-particules : un seul canvas, dessiné seulement pendant le geste */
+.ptr-dust { position: fixed; z-index: 0; top: 0; left: 0; width: 100%; height: 200px; pointer-events: none; }
 #app.ptr-live { will-change: transform; }
-#app.ptr-live, #app.ptr-anim { border-radius: 22px 22px 0 0; box-shadow: 0 -10px 28px #9EBF0040; }
+/* Pas de bord : le haut de la page se fond dans le dégradé (voile du fond sur 36 px) */
+#app::before { content: ""; position: absolute; left: 0; right: 0; top: -36px; height: 36px; pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg)); }
 #app.ptr-anim { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
 #app.ptr-anim .logo { transition: transform .7s cubic-bezier(.2, .8, .2, 1); }
 html.ptr-busy #app .logo { transition: transform 1s cubic-bezier(.35, .1, .25, 1); }
@@ -262,6 +270,7 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
 </head>
 <body>
 <div class="ptr-sky" aria-hidden="true"></div>
+<canvas class="ptr-dust" id="ptr-dust" aria-hidden="true"></canvas>
 <div class="ptr-hint" id="ptr-hint" aria-hidden="true">Tire pour actualiser</div>
 <div class="ptr-pill" id="ptr-pill" role="status" aria-live="polite"><i></i><span>Mise à jour…</span></div>
 <div id="app">
@@ -575,6 +584,53 @@ render();
 // et au plus une mise à jour par image affichée (requestAnimationFrame). Aucun recalcul de style de la page.
 (() => {
   const root = document.documentElement, app = $('#app'), logo = $('#logo'), hint = $('#ptr-hint'), sky = $('.ptr-sky');
+  // --- Micro-particules jaune-vert : naissent au bord de la page et s'élèvent en se dissolvant dans le dégradé
+  const dust = (() => {
+    const cv = $('#ptr-dust'), ctx = cv.getContext('2d'), H = 200;
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let parts = [], raf = 0, w = 0, dpr = 1, rate = 0, sprite = null;
+    const size = () => {
+      dpr = Math.min(devicePixelRatio || 1, 2); w = innerWidth;
+      cv.width = w * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Une seule "goutte" pré-rendue (cœur #F6FF00 → bord #C8EB00 → halo transparent), réutilisée en drawImage
+      sprite = document.createElement('canvas'); sprite.width = sprite.height = 32;
+      const s = sprite.getContext('2d'), g = s.createRadialGradient(16, 16, 0, 16, 16, 16);
+      g.addColorStop(0, '#F6FF00'); g.addColorStop(.28, '#D5FF00'); g.addColorStop(.45, '#B5D90066'); g.addColorStop(1, '#B5D90000');
+      s.fillStyle = g; s.fillRect(0, 0, 32, 32);
+    };
+    const spawn = (gap, n) => {
+      for (let i = 0; i < n && parts.length < 90; i++) {
+        const r = .7 + Math.random() * Math.random() * 2.2;          // surtout des fines, quelques plus grosses
+        parts.push({ x: Math.random() * w, y: gap * (.5 + .5 * Math.random()), r,
+          vx: (Math.random() - .5) * .25, vy: -(.35 + Math.random() * .9) * (1.6 - r / 4),
+          ph: Math.random() * 6.28, life: 0, max: 70 + Math.random() * 80 });
+      }
+    };
+    const tick = () => {
+      raf = 0;
+      const gap = Math.max(0, app.getBoundingClientRect().top);
+      ctx.clearRect(0, 0, w, H);
+      if (gap > 4) { const want = rate * (gap / 80); spawn(gap, (want | 0) + (Math.random() < want % 1 ? 1 : 0)); }
+      parts = parts.filter((q) => {
+        q.life++; q.ph += .05;
+        q.x += q.vx + Math.sin(q.ph) * .18; q.y += q.vy; q.vy *= .995;
+        const t = q.life / q.max;
+        if (t >= 1 || q.y < -8 || q.y > gap + 4) return false;
+        // apparition rapide, disparition lente ; plus discrète en montant dans le vert
+        const a = Math.min(1, t * 6) * (1 - t) * (.35 + .65 * Math.min(1, q.y / Math.max(gap, 1)));
+        ctx.globalAlpha = a; const d = q.r * 5;
+        ctx.drawImage(sprite, q.x - d / 2, q.y - d / 2, d, d);
+        return true;
+      });
+      ctx.globalAlpha = 1;
+      if (parts.length || gap > 4) raf = requestAnimationFrame(tick);
+    };
+    addEventListener('resize', () => { if (sprite) size(); });
+    return {
+      flow(r) { if (calm) return; if (!sprite) size(); rate = r; if (!raf) raf = requestAnimationFrame(tick); },
+      burst() { if (calm) return; if (!sprite) size(); spawn(Math.max(0, app.getBoundingClientRect().top), 28); if (!raf) raf = requestAnimationFrame(tick); },
+    };
+  })();
   const anim = (on) => { app.classList.toggle('ptr-anim', on); sky.classList.toggle('ptr-anim', on); };
   const TH = 80;                       // distance (après résistance) pour déclencher l'actualisation
   let y0 = null, pull = 0, active = false, frame = 0, next = null;
@@ -583,7 +639,8 @@ render();
     if (!next) return;
     const [p, deg] = next; next = null;
     app.style.transform = p ? `translate3d(0, ${p}px, 0)` : '';
-    sky.style.transform = `scaleY(${p / 140 + (p ? 0.12 : 0)})`;   // léger débord : pas de liseré sous l'arrondi
+    sky.style.setProperty('--g', `${p}px`);              // le dôme finit pile sur le fond, au bord de la page
+    sky.style.setProperty('--k', Math.min(1, p / 120));  // plus on tire, plus le vert prend de place
     logo.style.transform = deg ? `rotateY(${deg}deg)` : '';
   };
   const set = (p, deg, now) => {
@@ -595,7 +652,7 @@ render();
   const reset = () => {
     anim(false); app.classList.remove('ptr-live');
     setState('ptr-ready', false); setState('ptr-pulling', false);
-    set(0, 0, true);
+    set(0, 0, true); dust.flow(0);
     hint.textContent = 'Tire pour actualiser';
   };
   addEventListener('touchstart', (e) => {
@@ -615,6 +672,7 @@ render();
     if (e.cancelable) e.preventDefault();               // on garde la main sur le geste
     pull = Math.max(0, Math.min(140, (dy - 6) * 0.5));  // résistance élastique
     set(pull, (pull / TH) * 360);                       // un tour complet au seuil
+    dust.flow(Math.min(1.6, pull / TH * 1.2));
     const ready = pull >= TH;
     if (ready !== root.classList.contains('ptr-ready')) {
       setState('ptr-ready', ready);
@@ -633,6 +691,7 @@ render();
       setState('ptr-busy', true);
       hint.textContent = 'Actualisation…';
       set(58, Math.ceil(deg / 360) * 360 + 720, true);
+      dust.burst(); dust.flow(1.4);
       refresh();
     } else {
       // Relâché trop tôt : le W finit son tour (comme une toupie) en remontant
@@ -674,6 +733,7 @@ render();
     await wait(Math.max(0, 1000 - (Date.now() - t0)));
     // Le W a fini ses tours sur un multiple de 360° : on le remet à 0 sans animation (invisible)
     logo.style.transition = 'none'; logo.style.transform = ''; logo.getBoundingClientRect(); logo.style.transition = '';
+    dust.flow(0);
     setState('ptr-busy', false); setState('ptr-pulling', false); setState('ptr-ready', false);
     set(0, 0, true);
     setTimeout(reset, 600);
