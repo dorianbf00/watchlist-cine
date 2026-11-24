@@ -55,10 +55,13 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
    puis tout revient en rebondissant. Rien derrière la page : même fond, aucun bord. */
 html, body { overscroll-behavior-y: none; }
 #app { position: relative; z-index: 1; background: var(--bg); }
-#app.ptr-live, #app.ptr-live .logo { will-change: transform; }
-#app.ptr-live .logo { transform-origin: 50% 100%; }
+#app.ptr-live { will-change: transform; }
+/* Le W s'étire DANS le SVG (groupe .logo-shape) : redessiné en vectoriel à chaque image, donc toujours net */
+.logo { overflow: visible; }
+.logo-shape { transform-box: view-box; transform-origin: 50% 100%; }
 #app.ptr-anim { transition: transform .6s cubic-bezier(.34, 1.5, .64, 1); }
-#app.ptr-anim .logo { transform-origin: 50% 100%; transition: transform .6s cubic-bezier(.34, 1.7, .64, 1), filter .3s; }
+#app.ptr-anim .logo-shape { transition: transform .6s cubic-bezier(.34, 1.7, .64, 1); }
+#app.ptr-anim .logo { transition: filter .3s; }
 html.ptr-ready #app .logo { filter: drop-shadow(0 8px 22px #C8F00099); transition: filter .25s; }
 /* Mise à jour en cours : la page reste utilisable, une pastille jaune-vert attend en bas */
 .ptr-pill { position: fixed; z-index: 20; bottom: calc(env(safe-area-inset-bottom) + 18px); left: 50%; pointer-events: none;
@@ -328,7 +331,7 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
 <div id="app">
 <header class="masthead wrap">
   <h1 class="logo-wrap"><span class="sr">Watchlist</span>
-    <svg class="logo" id="logo" aria-hidden="true" viewBox="0 0 96.774 75"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></svg>
+    <svg class="logo" id="logo" aria-hidden="true" viewBox="0 0 96.774 75"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><g class="logo-shape" id="logo-shape"><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></g></svg>
   </h1>
   <p class="sub" id="sub"></p>
 </header>
@@ -749,9 +752,9 @@ state.day = DAYS.includes(saved) ? saved : DAYS.includes(todayIso) ? todayIso : 
 render();
 
 // --- Tirer pour actualiser : la page descend, le W s'étire vers le haut au rythme du doigt -------
-// Performance : seuls #app et le logo bougent, en transform (carte graphique), une mise à jour par image.
+// Performance : #app bouge en transform (carte graphique) ; le W est étiré dans le SVG (vectoriel, reste net). Une mise à jour par image.
 (() => {
-  const root = document.documentElement, app = $('#app'), logo = $('#logo');
+  const root = document.documentElement, app = $('#app'), logo = $('#logo'), shape = $('#logo-shape');
   const TH = 80;                       // distance (après résistance) pour déclencher l'actualisation
   let y0 = null, pull = 0, active = false, frame = 0, next = null, LH = 0;
   const apply = () => {
@@ -760,7 +763,7 @@ render();
     const p = next; next = null;
     app.style.transform = p ? `translate3d(0, ${p}px, 0)` : '';
     // le bas du W suit la page, son sommet reste en place : il s'étire d'autant que la page descend
-    logo.style.transform = p ? `scaleY(${1 + p / LH})` : '';
+    shape.style.transform = p ? `scaleY(${1 + p / LH})` : '';
   };
   const set = (p, now) => {
     next = p;
