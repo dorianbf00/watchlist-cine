@@ -293,7 +293,7 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
 <script>
 const DATA = /*__DATA__*/null;
 // Relais Cloudflare qui relance la mise à jour au "tirer pour actualiser" (vide = simple rechargement)
-const REFRESH_URL = '';
+const REFRESH_URL = 'https://watchlist-refresh.doriansublon.workers.dev/';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
