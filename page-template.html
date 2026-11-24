@@ -19,7 +19,7 @@
 /* Direction artistique : blanc / noir pour les fonds + les 2 couleurs du logo officiel (Figma, frame 11)
    - jaune-vert du W (#D5FF00 -> #F6FF00) : ce qui est À TOI ou SÉLECTIONNÉ (logo, jour choisi, "Vu", watchlist)
    - bleu électrique (#0033FF)          : ACTIONS et RECOMMANDATIONS (horaires, filtres, "87 %", "Aussi à l'affiche")
-   - dégradé blanc -> bleu du fond de l'icône : signature, réservé au geste "tirer pour actualiser" */
+   - dégradé jaune-vert -> fond de page : signature, réservé au geste "tirer pour actualiser" */
 :root {
   --bg: #ffffff; --ink: #030303; --gray: #6a6a6d; --gray-t: #6a6a6d99;
   --lime-1: #D5FF00; --lime-2: #F6FF00; --lime: #E6FF00; --lime-grad: linear-gradient(180deg, var(--lime-1), var(--lime-2));
@@ -54,17 +54,26 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
 /* Tirer pour actualiser */
 html, body { overscroll-behavior-y: none; }
 #app { position: relative; z-index: 1; background: var(--bg); }
-.ptr-sky { position: fixed; z-index: 0; top: 0; left: 0; right: 0; height: 220px; pointer-events: none;
-  background: linear-gradient(180deg, #0033FF 0%, #5C7CFF 45%, var(--bg) 100%); }
+/* Le dégradé est étiré (scaleY, sur la carte graphique) pour toujours finir au bord de la page tirée */
+.ptr-sky { position: fixed; z-index: 0; top: 0; left: 0; right: 0; height: 140px; pointer-events: none;
+  transform-origin: top; transform: scaleY(0); will-change: transform;
+  background: linear-gradient(180deg, var(--lime-1), var(--lime-2) 18%, var(--bg));
+  background: linear-gradient(in oklab 180deg, var(--lime-1), var(--lime-2) 18%, color-mix(in oklab, var(--lime-2) 55%, var(--bg)) 55%, var(--bg)); }
+.ptr-sky.ptr-anim { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
 #app.ptr-live { will-change: transform; }
-#app.ptr-live, #app.ptr-anim { border-radius: 22px 22px 0 0; box-shadow: 0 -10px 28px #0033FF40; }
+#app.ptr-live, #app.ptr-anim { border-radius: 22px 22px 0 0; box-shadow: 0 -10px 28px #9EBF0040; }
 #app.ptr-anim { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
 #app.ptr-anim .logo { transition: transform .7s cubic-bezier(.2, .8, .2, 1); }
 html.ptr-busy #app .logo { transition: transform 1s cubic-bezier(.35, .1, .25, 1); }
+/* Mise à jour en cours (2-3 min) : le W tourne en continu, la page reste entrouverte sur le dégradé */
+html.ptr-wait #app .logo { transition: none; animation: ptr-spin 1.4s linear infinite; }
+@keyframes ptr-spin { from { transform: rotateY(0); } to { transform: rotateY(360deg); } }
+html.ptr-wait .ptr-hint { animation: ptr-breathe 1.6s ease-in-out infinite; }
+@keyframes ptr-breathe { 50% { opacity: .55; } }
 .ptr-hint { position: fixed; z-index: 4; top: calc(env(safe-area-inset-top) + 12px); left: 0; right: 0; text-align: center; pointer-events: none;
-  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #ffffffcc; opacity: 0; transition: opacity .2s; }
-html.ptr-pulling .ptr-hint { opacity: 1; }
-html.ptr-ready .ptr-hint { color: #fff; }
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #030303a6; opacity: 0; transition: opacity .2s; }
+html.ptr-pulling .ptr-hint, html.ptr-busy .ptr-hint { opacity: 1; }
+html.ptr-ready .ptr-hint, html.ptr-busy .ptr-hint { color: #030303; }
 .title { background: var(--green); color: var(--on-green); text-align: center; margin: 0; padding: 8px 10px 4px;
   font-size: clamp(34px, 11vw, 76px); line-height: 1; }
 .sub { text-align: center; color: var(--gray); font-size: 14px; font-weight: 500; text-transform: uppercase; margin: 10px 0 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
@@ -283,6 +292,8 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
 
 <script>
 const DATA = /*__DATA__*/null;
+// Relais Cloudflare qui relance la mise à jour au "tirer pour actualiser" (vide = simple rechargement)
+const REFRESH_URL = 'https://watchlist-refresh.doriansublon.workers.dev/';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -558,7 +569,8 @@ render();
 // Performance : un seul conteneur (#app) est déplacé, en translate3d (calculé par la carte graphique),
 // et au plus une mise à jour par image affichée (requestAnimationFrame). Aucun recalcul de style de la page.
 (() => {
-  const root = document.documentElement, app = $('#app'), logo = $('#logo'), hint = $('#ptr-hint');
+  const root = document.documentElement, app = $('#app'), logo = $('#logo'), hint = $('#ptr-hint'), sky = $('.ptr-sky');
+  const anim = (on) => { app.classList.toggle('ptr-anim', on); sky.classList.toggle('ptr-anim', on); };
   const TH = 80;                       // distance (après résistance) pour déclencher l'actualisation
   let y0 = null, pull = 0, active = false, frame = 0, next = null;
   const apply = () => {
@@ -566,6 +578,7 @@ render();
     if (!next) return;
     const [p, deg] = next; next = null;
     app.style.transform = p ? `translate3d(0, ${p}px, 0)` : '';
+    sky.style.transform = `scaleY(${p / 140 + (p ? 0.12 : 0)})`;   // léger débord : pas de liseré sous l'arrondi
     logo.style.transform = deg ? `rotateY(${deg}deg)` : '';
   };
   const set = (p, deg, now) => {
@@ -575,7 +588,7 @@ render();
   };
   const setState = (cls, on) => { if (root.classList.contains(cls) !== on) root.classList.toggle(cls, on); };
   const reset = () => {
-    app.classList.remove('ptr-anim', 'ptr-live');
+    anim(false); app.classList.remove('ptr-live');
     setState('ptr-ready', false); setState('ptr-pulling', false);
     set(0, 0, true);
     hint.textContent = 'Tire pour actualiser';
@@ -591,7 +604,7 @@ render();
       if (dy < 0 || scrollY > 0) { y0 = null; return; }   // geste vers le haut : défilement normal
       if (dy <= 6) return;
       active = true;
-      app.classList.remove('ptr-anim'); app.classList.add('ptr-live');
+      anim(false); app.classList.add('ptr-live');
       setState('ptr-pulling', true);
     }
     if (e.cancelable) e.preventDefault();               // on garde la main sur le geste
@@ -609,13 +622,13 @@ render();
     if (!active) return;
     active = false;
     const deg = (pull / TH) * 360;
-    app.classList.add('ptr-anim');
+    anim(true);
     if (pull >= TH) {
-      // Actualisation : le W enchaîne deux tours en restant un peu descendu, puis la page se recharge
+      // Actualisation : le W enchaîne deux tours en restant un peu descendu, pendant qu'on relance la mise à jour
       setState('ptr-busy', true);
       hint.textContent = 'Actualisation…';
-      set(58, deg + 720, true);
-      setTimeout(() => location.reload(), 700);
+      set(58, Math.ceil(deg / 360) * 360 + 720, true);
+      refresh();
     } else {
       // Relâché trop tôt : le W finit son tour (comme une toupie) en remontant
       setState('ptr-pulling', false);
@@ -626,6 +639,45 @@ render();
   };
   addEventListener('touchend', end);
   addEventListener('touchcancel', end);
+
+  // Relance réelle : le relais Cloudflare déclenche le workflow GitHub (relit watchlist + séances),
+  // puis on guette la nouvelle version publiée et on recharge. Sans relais : simple rechargement.
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const say = (t) => { hint.textContent = t; };
+  const published = async () => {
+    try {
+      const html = await (await fetch(`./?v=${Date.now()}`, { cache: 'no-store' })).text();
+      return (html.match(/"generated":"([^"]+)"/) || [])[1];
+    } catch { return null; }
+  };
+  const spin = () => setTimeout(() => { setState('ptr-wait', true); logo.style.transform = ''; }, 1000);
+  async function refresh() {
+    const t0 = Date.now();
+    let state = null;
+    if (REFRESH_URL) {
+      try { state = (await (await fetch(REFRESH_URL, { method: 'POST' })).json()).state; } catch {}
+    }
+    if (state !== 'started' && state !== 'running') {
+      // Pas de relais, ou mise à jour toute fraîche (< 10 min) : la page publiée est déjà la bonne
+      if (state === 'fresh') say('Déjà à jour');
+      await wait(Math.max(0, 900 - (Date.now() - t0)));
+      return location.reload();
+    }
+    say('Mise à jour en cours…');
+    spin();
+    const limit = t0 + 8 * 60e3;
+    while (Date.now() < limit) {
+      await wait(10e3);
+      const g = await published();
+      if (g && g !== DATA.generated) { say('C’est à jour !'); await wait(600); return location.reload(); }
+    }
+    // Trop long : on rend la main, la page se mettra à jour toute seule au prochain passage
+    say('Toujours en cours, réessaie plus tard');
+    await wait(2500);
+    setState('ptr-wait', false); setState('ptr-busy', false); setState('ptr-pulling', false);
+    set(0, 0, true);
+    setTimeout(reset, 600);
+  }
 })();
 </script>
 </body>
