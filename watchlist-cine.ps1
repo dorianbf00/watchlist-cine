@@ -567,10 +567,14 @@ Save-Feats
 Write-Host "Autres films : $(@($others.Values | Where-Object { $_.seen }).Count) déjà vus, $scored avec une note prévue (ta moyenne : ★$([math]::Round($mu, 2)))"
 
 # --- 3b. Films de la watchlist : affiche, note, durée + vérification du réalisateur ----
+# Fiches gardées en cache 14 jours (clé "lb:<slug>") : relire chaque fiche à chaque passage prenait l'essentiel du temps
 $rejected = @()
 foreach ($f in @($results.Values)) {
   # L'affiche est dans les données structurées (JSON-LD) de la fiche Letterboxd ; 3 essais en cas d'erreur réseau
   $lbDirectors = @()
+  $fc = $cache["lb:$($f.slug)"]
+  $hit = $fc -and $fc.poster -and ($now - [datetime]$fc.t).TotalDays -lt 14
+  if ($hit) { $f.poster = $fc.poster; $f.rating = $fc.rating; $f.runtime = $fc.runtime; $lbDirectors = @($fc.dirs) }
   for ($try = 1; $try -le 3 -and -not $f.poster; $try++) {
     try {
       $h = Get-Utf8 "https://letterboxd.com/film/$($f.slug)/"
@@ -600,8 +604,14 @@ foreach ($f in @($results.Values)) {
     } catch {}
     Write-Host "Pas d'affiche Letterboxd pour $($f.slug) -> photo de secours : $([bool]$f.still)"
   }
+  if ($hit) { continue }
+  if ($f.poster) {
+    $cache["lb:$($f.slug)"] = [pscustomobject]@{ poster = $f.poster; rating = $f.rating; runtime = $f.runtime; dirs = @($lbDirectors); t = $now.ToString('yyyy-MM-dd') }
+  }
   Start-Sleep -Milliseconds 300
 }
+$cache.GetEnumerator() | ForEach-Object -Begin { $o = [ordered]@{} } -Process { $o[$_.Key] = $_.Value } -End {
+  [IO.File]::WriteAllText($cachePath, ($o | ConvertTo-Json -Depth 4 -Compress), (New-Object Text.UTF8Encoding($false))) }
 # Les films écartés (homonymes) rejoignent les "autres films"
 foreach ($s in $rejected) {
   $f = $results[$s]; $results.Remove($s)
