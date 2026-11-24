@@ -65,11 +65,15 @@ html, body { overscroll-behavior-y: none; }
 #app.ptr-anim { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
 #app.ptr-anim .logo { transition: transform .7s cubic-bezier(.2, .8, .2, 1); }
 html.ptr-busy #app .logo { transition: transform 1s cubic-bezier(.35, .1, .25, 1); }
-/* Mise à jour en cours (2-3 min) : le W tourne en continu, la page reste entrouverte sur le dégradé */
-html.ptr-wait #app .logo { transition: none; animation: ptr-spin 1.4s linear infinite; }
-@keyframes ptr-spin { from { transform: rotateY(0); } to { transform: rotateY(360deg); } }
-html.ptr-wait .ptr-hint { animation: ptr-breathe 1.6s ease-in-out infinite; }
-@keyframes ptr-breathe { 50% { opacity: .55; } }
+/* Mise à jour en cours : la page remonte et reste utilisable, une pastille jaune-vert attend en bas */
+.ptr-pill { position: fixed; z-index: 20; bottom: calc(env(safe-area-inset-bottom) + 18px); left: 50%; pointer-events: none;
+  display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 10px; border-radius: 999px;
+  background: var(--lime-grad); color: #030303; box-shadow: 0 6px 18px #9EBF0055;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+  opacity: 0; transform: translate(-50%, 16px) scale(.92); transition: opacity .3s, transform .45s cubic-bezier(.2, .8, .2, 1); }
+html.ptr-wait .ptr-pill { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.ptr-pill i { width: 8px; height: 8px; border-radius: 50%; background: #030303; animation: ptr-beat 1.1s ease-in-out infinite; }
+@keyframes ptr-beat { 50% { transform: scale(.45); opacity: .4; } }
 .ptr-hint { position: fixed; z-index: 4; top: calc(env(safe-area-inset-top) + 12px); left: 0; right: 0; text-align: center; pointer-events: none;
   font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #030303a6; opacity: 0; transition: opacity .2s; }
 html.ptr-pulling .ptr-hint, html.ptr-busy .ptr-hint { opacity: 1; }
@@ -259,6 +263,7 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
 <body>
 <div class="ptr-sky" aria-hidden="true"></div>
 <div class="ptr-hint" id="ptr-hint" aria-hidden="true">Tire pour actualiser</div>
+<div class="ptr-pill" id="ptr-pill" role="status" aria-live="polite"><i></i><span>Mise à jour…</span></div>
 <div id="app">
 <header class="masthead wrap">
   <h1 class="logo-wrap"><span class="sr">Watchlist</span>
@@ -594,7 +599,7 @@ render();
     hint.textContent = 'Tire pour actualiser';
   };
   addEventListener('touchstart', (e) => {
-    if (scrollY > 0 || e.touches.length > 1 || root.classList.contains('ptr-busy')) return;
+    if (scrollY > 0 || e.touches.length > 1 || root.classList.contains('ptr-busy') || root.classList.contains('ptr-wait')) return;
     y0 = e.touches[0].clientY; active = false; pull = 0;
   }, { passive: true });
   addEventListener('touchmove', (e) => {
@@ -650,7 +655,8 @@ render();
       return (html.match(/"generated":"([^"]+)"/) || [])[1];
     } catch { return null; }
   };
-  const spin = () => setTimeout(() => { setState('ptr-wait', true); logo.style.transform = ''; }, 1000);
+  const pill = $('#ptr-pill span');
+  const sayPill = (t) => { pill.textContent = t; };
   async function refresh() {
     const t0 = Date.now();
     let state = null;
@@ -663,20 +669,25 @@ render();
       await wait(Math.max(0, 900 - (Date.now() - t0)));
       return location.reload();
     }
-    say('Mise à jour en cours…');
-    spin();
-    const limit = t0 + 8 * 60e3;
-    while (Date.now() < limit) {
-      await wait(10e3);
-      const g = await published();
-      if (g && g !== DATA.generated) { say('C’est à jour !'); await wait(600); return location.reload(); }
-    }
-    // Trop long : on rend la main, la page se mettra à jour toute seule au prochain passage
-    say('Toujours en cours, réessaie plus tard');
-    await wait(2500);
-    setState('ptr-wait', false); setState('ptr-busy', false); setState('ptr-pulling', false);
+    // La page remonte tout de suite (on peut continuer à s'en servir), la pastille prend le relais
+    sayPill('Mise à jour…');
+    await wait(Math.max(0, 1000 - (Date.now() - t0)));
+    // Le W a fini ses tours sur un multiple de 360° : on le remet à 0 sans animation (invisible)
+    logo.style.transition = 'none'; logo.style.transform = ''; logo.getBoundingClientRect(); logo.style.transition = '';
+    setState('ptr-busy', false); setState('ptr-pulling', false); setState('ptr-ready', false);
     set(0, 0, true);
     setTimeout(reset, 600);
+    setState('ptr-wait', true);
+    const limit = t0 + 6 * 60e3;
+    while (Date.now() < limit) {
+      await wait(4e3);
+      const g = await published();
+      if (g && g !== DATA.generated) { sayPill('C’est à jour'); await wait(500); return location.reload(); }
+    }
+    // Trop long : on retire la pastille, la page se mettra à jour toute seule au prochain passage
+    sayPill('Réessaie plus tard');
+    await wait(2500);
+    setState('ptr-wait', false);
   }
 })();
 </script>
