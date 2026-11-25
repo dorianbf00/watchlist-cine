@@ -149,7 +149,7 @@ html.ptr-wait .ptr-pill { opacity: 1; transform: translate(-50%, 0) scale(1); }
 #others .t:hover, #others .t:active { background: var(--elec); border-color: var(--elec); color: var(--on-elec); }
 .t:hover svg, .t:active svg { color: #030303; }
 #others .t:hover svg, #others .t:active svg { color: var(--on-elec); }
-.t.past { color: var(--gray-t); border-color: var(--gray-t); text-decoration: line-through; }
+.t.past { color: var(--gray-t); border-color: var(--gray-t); text-decoration: line-through; pointer-events: none; }
 .more { background: none; border: 0; padding: 6px 0 0; color: var(--gray); font-weight: 600; font-size: 12.5px; text-transform: uppercase; text-decoration: underline; }
 .film:not(.expanded) .th.extra { display: none; }
 .film.expanded .more { display: none; }
@@ -488,17 +488,20 @@ const posterImg = (f) => (f.poster || f.still)
 // autres salles -> fichier calendrier (l'iPhone propose "Ajouter au calendrier")
 const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 function timeLink(f, s, t, k) {
-  const cls = `t${isPast(s.date, t) ? ' past' : ''}`;
+  // Séance passée : horaire barré, pas de lien
+  if (isPast(s.date, t)) return `<span class="t past" aria-label="${esc(f.title)} à ${fmtTime(t)} – séance passée">${s.book ? ticket : cal}${fmtTime(t)}</span>`;
+  const [hh, mm] = hm(t); const at = parseDay(s.date); at.setHours(hh, mm);
+  const cls = 't', att = ` data-at="${at.getTime()}"`;
   if (s.book) {
     const url = s.book[k] || s.app;
     const exact = !!s.book[k];
-    return `<a class="${cls} book" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${exact ? 'Réserver' : 'Voir'} ${esc(f.title)} à ${fmtTime(t)} – ${esc(s.theater)}">${ticket}${fmtTime(t)}</a>`;
+    return `<a class="${cls} book"${att} href="${esc(url)}" target="_blank" rel="noopener" aria-label="${exact ? 'Réserver' : 'Voir'} ${esc(f.title)} à ${fmtTime(t)} – ${esc(s.theater)}">${ticket}${fmtTime(t)}</a>`;
   }
   const ics = `ics/${encodeURIComponent((s.ics || [])[k] || '')}`;
   // App écran d'accueil : iOS y affiche une page blanche pour un .ics -> on le passe à Safari (x-safari-https://),
   // qui propose "Ajouter au calendrier"
   const href = standalone ? 'x-safari-' + new URL(ics, location.href).href : ics;
-  return `<a class="${cls}" href="${esc(href)}"${standalone ? '' : ' target="_blank" rel="noopener"'} aria-label="Ajouter ${esc(f.title)} à ${fmtTime(t)} à mon calendrier">${cal}${fmtTime(t)}</a>`;
+  return `<a class="${cls}"${att} href="${esc(href)}"${standalone ? '' : ' target="_blank" rel="noopener"'} aria-label="Ajouter ${esc(f.title)} à ${fmtTime(t)} à mon calendrier">${cal}${fmtTime(t)}</a>`;
 }
 
 // Salles + horaires ; au-delà de `max` salles, repliées
@@ -746,6 +749,14 @@ const mapUrl = (name, addr) => {
   return isIOS ? `https://maps.apple.com/?q=${q}` : `https://www.google.com/maps/search/?api=1&query=${q}`;
 };
 
+// Page restée ouverte : un horaire devenu passé n'est plus cliquable
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('a.t[data-at]');
+  if (a && +a.dataset.at < Date.now()) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    const sp = document.createElement('span'); sp.className = 't past'; sp.innerHTML = a.innerHTML; a.replaceWith(sp);
+  }
+}, true);
 document.addEventListener('click', (e) => {
   if (e.target.closest('.fs-close')) { closeSheet(); return; }
   const fl = e.target.closest('[data-film]');
