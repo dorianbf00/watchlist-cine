@@ -777,8 +777,9 @@ $parisTz = try { [TimeZoneInfo]::FindSystemTimeZoneById('Europe/Paris') } catch 
 $nBookFetch = 0; $nBookErr = 0
 
 # Valeur d'un attribut data-xxx="..." dans une balise HTML
+# UGC écrit data-seanceDate, data-filmId… : comparaison sans tenir compte des majuscules
 function Get-DataAttr([string]$tag, [string]$name) {
-  $x = [regex]::Match($tag, "\bdata-$name=""([^""]*)""")
+  $x = [regex]::Match($tag, "\bdata-$name=""([^""]*)""", 'IgnoreCase')
   if ($x.Success) { [Net.WebUtility]::HtmlDecode($x.Groups[1].Value) } else { '' }
 }
 
