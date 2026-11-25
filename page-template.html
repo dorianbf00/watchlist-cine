@@ -200,18 +200,25 @@ html.ptr-wait .ptr-pill { opacity: 1; transform: translate(-50%, 0) scale(1); }
 .empty b { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 28px; text-transform: uppercase; margin-bottom: 4px; }
 footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding: 0 0 calc(28px + env(safe-area-inset-bottom)); }
 /* Notifications Web Push (iPhone : seulement depuis l'appli ajoutée à l'écran d'accueil) */
-/* Watchlist d'un autre pseudo Letterboxd : invitation, saisie, attente */
-.who { border-bottom: 1px solid var(--line); padding: 12px 0; font-size: 13px; color: var(--gray); }
-.who[hidden] { display: none; }
-.who p { margin: 0 0 8px; }
-.who b { color: var(--ink); }
-.who form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.who input { flex: 1 1 160px; min-width: 0; border: 1px solid var(--line); background: transparent; color: var(--ink); padding: 6px 10px; font: 500 16px var(--sans); border-radius: 0; }
-.who input:focus { outline: 2px solid var(--elec); outline-offset: -1px; }
-.who .go { background: var(--elec-grad); color: var(--on-elec); border-color: var(--elec); }
-.who .err { color: var(--red); }
-.who .spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid var(--elec-text); border-right-color: transparent; border-radius: 50%; animation: whoSpin .8s linear infinite; vertical-align: -1px; }
 @keyframes whoSpin { to { transform: rotate(1turn); } }
+/* Écran d'accueil : pseudo Letterboxd demandé au premier lancement (et pendant la 1re récupération) */
+.welcome { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+  padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom)); }
+.welcome[hidden] { display: none; }
+html.need-user #app { visibility: hidden; }
+.welcome .wl-logo { width: 72px; margin-bottom: 18px; }
+.welcome .wl-logo svg { width: 100%; height: auto; display: block; overflow: visible; }
+.welcome h2 { margin: 0 0 8px; font-size: 30px; line-height: 1; }
+.welcome p { margin: 0 0 22px; color: var(--gray); font-size: 14px; max-width: 320px; }
+.welcome form { display: flex; gap: 8px; width: 100%; max-width: 340px; }
+.welcome input { flex: 1; min-width: 0; border: 1px solid var(--line); background: transparent; color: var(--ink); padding: 10px 12px; font: 500 17px var(--sans); border-radius: 0; }
+.welcome input:focus { outline: 2px solid var(--elec); outline-offset: -1px; }
+.welcome .go { background: var(--elec-grad); color: var(--on-elec); border-color: var(--elec); padding: 10px 16px; }
+.welcome .wl-cancel { margin-top: 12px; }
+.welcome .wl-cancel[hidden] { display: none; }
+.welcome .msg { min-height: 20px; margin: 14px 0 0; font-size: 13px; color: var(--gray); }
+.welcome .msg.err { color: var(--red); }
+.welcome .msg .spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid var(--elec-text); border-right-color: transparent; border-radius: 50%; animation: whoSpin .8s linear infinite; vertical-align: -1px; }
 .foot-who { background: none; border: 0; padding: 0; font-size: inherit; text-transform: inherit; color: var(--elec-text); text-decoration: underline; text-underline-offset: 2px; }
 .notif { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 14px; }
 .notif[hidden] { display: none; }
@@ -341,13 +348,20 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
 <div class="fs-scrim" id="fs-scrim"></div>
 <div class="fsheet" id="fsheet" role="dialog" aria-modal="true" aria-label="Fiche du film"></div>
 <div class="ptr-pill" id="ptr-pill" role="status" aria-live="polite"><i></i><span>Mise à jour…</span></div>
+<div class="welcome" id="welcome" hidden role="dialog" aria-modal="true" aria-labelledby="wl-title">
+  <div class="wl-logo" id="wl-logo" aria-hidden="true"></div>
+  <h2 class="display" id="wl-title">Watchlist au ciné</h2>
+  <p>Les films de ta watchlist Letterboxd à l’affiche à Paris cette semaine (cinémas carte UGC Illimité).</p>
+  <form id="wl-form"><input id="wl-in" placeholder="ton pseudo Letterboxd" aria-label="Ton pseudo Letterboxd" autocomplete="username" autocapitalize="off" spellcheck="false" enterkeyhint="go"><button class="chip go">Voir</button></form>
+  <button class="chip wl-cancel" id="wl-cancel" type="button" hidden>Annuler</button>
+  <p class="msg" id="wl-msg" role="status">letterboxd.com/<b>pseudo</b> · watchlist publique</p>
+</div>
 <div id="app">
 <header class="masthead wrap">
   <h1 class="logo-wrap"><span class="sr">Watchlist</span>
     <svg class="logo" id="logo" aria-hidden="true" viewBox="0 0 96.774 75"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></svg>
   </h1>
   <p class="sub" id="sub"></p>
-  <div class="who" id="who" hidden></div>
 </header>
 
 <div class="bar">
@@ -418,10 +432,12 @@ const cleanUser = (u) => {
 };
 {
   const q = new URLSearchParams(location.search).get('u');
-  if (q != null) { const u = cleanUser(q); store.set('lbUser', u && u !== OWNER ? u : null); store.set('lbAsked', '1'); }
+  if (q != null && cleanUser(q)) store.set('lbUser', cleanUser(q));
 }
-let ME = cleanUser(store.get('lbUser'));
-if (ME === OWNER) ME = '';
+// Pas encore de pseudo (1er lancement) : écran d'accueil, pour tout le monde
+const CHOSEN = cleanUser(store.get('lbUser') || new URLSearchParams(location.search).get('u'));
+let ME = CHOSEN === OWNER ? '' : CHOSEN;
+if (!CHOSEN) document.documentElement.classList.add('need-user');
 const readWl = (u) => { try { return JSON.parse(store.get('wl:' + u)); } catch { return null; } };
 const myWl = ME ? readWl(ME) : null;
 if (ME) {
@@ -840,7 +856,7 @@ document.addEventListener('click', (e) => {
 const gen = new Date(DATA.generated);
 const nWeek = films.filter((f) => f.seances.some((s) => DAYS.includes(s.date))).length;
 $('#sub').textContent = `${nWeek} film${nWeek > 1 ? 's' : ''} de ta watchlist à l'affiche · du ${fr(parseDay(DAYS[0]), { day: 'numeric', month: 'long' })} au ${fr(parseDay(DAYS.at(-1)), { day: 'numeric', month: 'long' })}`;
-$('#foot').innerHTML = `Mis à jour le ${esc(fr(gen, { weekday: 'long', day: 'numeric', month: 'long' }))} à ${pad(gen.getHours())}h${pad(gen.getMinutes())} · ${DATA.watchlistCount} films dans la watchlist de ${esc(DATA.user)} · <button class="foot-who" id="foot-who">Changer de watchlist</button>`;
+$('#foot').innerHTML = `Mis à jour le ${esc(fr(gen, { weekday: 'long', day: 'numeric', month: 'long' }))} à ${pad(gen.getHours())}h${pad(gen.getMinutes())} · ${DATA.watchlistCount} films dans la watchlist de ${esc(DATA.user)} · <button class="foot-who" id="foot-who">Changer de compte</button>`;
 $('#others-toggle').setAttribute('aria-pressed', state.showOthers);
 let saved = null; try { saved = sessionStorage.getItem('day'); } catch {}
 state.day = DAYS.includes(saved) ? saved : DAYS.includes(todayIso) ? todayIso : DAYS[0];
@@ -850,33 +866,33 @@ render();
 const relay = (p, body) => fetch(REFRESH_URL + p, body
   ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   : { cache: 'no-store' }).then((r) => r.json());
-const who = $('#who');
-function askUser(msg = '', isErr = false) {
-  who.hidden = false;
-  who.innerHTML = `<p>${isErr ? `<span class="err">${esc(msg)}</span>` : msg || (ME ? 'Voir une autre watchlist Letterboxd :' : `Tu vois la watchlist Letterboxd de <b>${esc(DATA.user)}</b>. Pour voir <b>la tienne</b> au ciné cette semaine :`)}</p>
-    <form id="who-form"><input id="who-in" name="u" placeholder="pseudo Letterboxd" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" value="${esc(ME)}">
-      <button class="chip go">Voir</button>${ME ? `<button class="chip" type="button" data-u="${esc(OWNER)}">Revenir à ${esc(OWNER)}</button>` : ''}<button class="chip" type="button" data-u="">${ME ? 'Annuler' : 'Non merci'}</button></form>`;
-}
 function useUser(u) {
-  store.set('lbAsked', '1');
-  if (u === null) { who.hidden = true; return; }
-  store.set('lbUser', u && u !== OWNER ? u : null);
-  // Lien partageable / écran d'accueil : le pseudo voyage dans l'adresse
-  const url = new URL(location.href); url.searchParams.delete('u'); if (u && u !== OWNER) url.searchParams.set('u', u);
+  store.set('lbUser', u);
+  // Le pseudo voyage aussi dans l'adresse (lien partageable, et marche même sans mémoire du navigateur)
+  const url = new URL(location.href); url.searchParams.set('u', u);
   location.replace(url.href);
 }
-who.addEventListener('submit', (e) => {
+
+// Écran d'accueil
+const welcome = $('#welcome'), wlMsg = $('#wl-msg');
+function showWelcome(msg, kind = '') {
+  welcome.hidden = false; document.documentElement.classList.add('need-user');
+  if (!$('#wl-logo').firstChild) $('#wl-logo').appendChild($('#logo').cloneNode(true)).removeAttribute('id');
+  if (msg != null) { wlMsg.className = 'msg ' + kind; wlMsg.innerHTML = msg; }
+  const busy = kind === 'busy';
+  $('#wl-in').disabled = busy; $('#wl-form .go').disabled = busy;
+}
+$('#wl-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  const u = cleanUser($('#who-in').value);
-  if (!u) { askUser('Pseudo invalide : celui de ton profil, letterboxd.com/pseudo', true); return; }
-  if (ME && u === ME) { who.hidden = true; return; }
+  const u = cleanUser($('#wl-in').value);
+  if (!u) { showWelcome('Pseudo invalide : celui de ton profil, letterboxd.com/<b>pseudo</b>', 'err'); return; }
   useUser(u);
 });
-who.addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-u]');
-  if (b) useUser(b.dataset.u || null);   // "Non merci" / "Annuler" : on garde la watchlist actuelle
+if (!CHOSEN) { showWelcome(); setTimeout(() => $('#wl-in').focus(), 50); }
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#foot-who')) { $('#wl-in').value = ''; showWelcome('Pseudo Letterboxd de la watchlist à afficher'); $('#wl-cancel').hidden = false; $('#wl-in').focus(); }
 });
-document.addEventListener('click', (e) => { if (e.target.closest('#foot-who')) { askUser(); who.scrollIntoView({ block: 'center', behavior: 'smooth' }); $('#who-in').focus(); } });
+$('#wl-cancel').addEventListener('click', () => { welcome.hidden = true; document.documentElement.classList.remove('need-user'); });
 
 // Watchlist de l'autre pseudo : enregistrée auprès du relais, récupérée par GitHub Actions (≈ 1 min la 1re fois)
 async function syncWl(refresh = false) {
@@ -888,14 +904,16 @@ async function syncWl(refresh = false) {
   const save = (x) => { store.set('wl:' + ME, JSON.stringify({ updated: x.updated, count: x.count, slugs: x.slugs })); };
   if (r.state === 'notfound') {
     store.set('lbUser', null); store.set('wl:' + ME, null);
-    askUser(`Pseudo « ${ME} » introuvable sur Letterboxd, ou watchlist privée.`, true);
+    { const url = new URL(location.href); url.searchParams.delete('u'); history.replaceState(null, '', url.href); }
+    $('#wl-in').value = ME;
+    showWelcome(`Pseudo « ${esc(ME)} » introuvable sur Letterboxd, ou watchlist privée.`, 'err');
     return null;
   }
   if (r.state === 'ready' && !r.refreshing) { if (fresh(r)) { save(r); location.reload(); } return r; }
   if (r.state !== 'pending' && !r.refreshing) return null;
   if (r.state === 'pending') {
-    who.hidden = false;
-    who.innerHTML = `<p><span class="spin"></span>On récupère la watchlist Letterboxd de <b>${esc(ME)}</b>… (environ 1 min la première fois)</p>`;
+    $('#wl-in').value = ME;
+    showWelcome(`<span class="spin"></span>On récupère ta watchlist… (environ 1 min la première fois)`, 'busy');
   }
   // On guette la watchlist (le workflow la dépose dans le relais)
   const t0 = Date.now(), before = r.checked;
@@ -909,11 +927,12 @@ async function syncWl(refresh = false) {
       return x;
     }
   }
-  if (r.state === 'pending') who.innerHTML = `<p class="err">Letterboxd ne répond pas pour l’instant. Tire la page vers le bas pour réessayer.</p>`;
+  if (r.state === 'pending') { store.set('lbUser', null); { const url = new URL(location.href); url.searchParams.delete('u'); history.replaceState(null, '', url.href); } showWelcome('Letterboxd ne répond pas pour l’instant. Réessaie dans quelques minutes.', 'err'); }
   return r;
 }
+// Nouveau pseudo : l'écran d'accueil reste affiché le temps de récupérer sa watchlist
+if (ME && !myWl) showWelcome(`<span class="spin"></span>On récupère ta watchlist…`, 'busy');
 if (ME) syncWl();
-else if (!store.get('lbAsked') && !store.get('lbUser')) askUser();
 
 // --- Notifications Web Push : l'icône de l'appli au lieu de celle de ntfy ------------------------
 // Le relais Cloudflare garde les abonnements et envoie les notifs (voir cloudflare/worker.js).
