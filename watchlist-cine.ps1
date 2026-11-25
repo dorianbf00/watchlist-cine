@@ -2,7 +2,7 @@
   watchlist-cine.ps1
   Croise ta watchlist Letterboxd avec les séances du Rétro Projecteur (Paris)
   sur les N prochains jours, génère la page index.html (à partir de page-template.html)
-  et, en option, envoie une notification push via ntfy.
+  et prépare le contenu de la notification (envoyée en Web Push par l'Action GitHub).
 
   Usage :  powershell -ExecutionPolicy Bypass -File watchlist-cine.ps1 -User <pseudo_letterboxd>
 #>
@@ -10,7 +10,6 @@ param(
   [Parameter(Mandatory = $true)][string]$User,
   [int]$Days = 7,
   [string]$OutDir,
-  [string]$NtfyTopic,   # si fourni : envoie une notification push via ntfy.sh
   [string]$PageUrl,     # URL publique de la page (ouverte quand on touche la notif)
   [string]$NotifOut,    # écrit le contenu de la notif (titre/message/lien) dans ce fichier JSON
   [string]$CachePath,   # cache des fiches Letterboxd trouvées (par défaut lb-cache.json à côté du script)
@@ -1002,7 +1001,7 @@ $films = @($results.Values)
 Write-Host "$($films.Count) film(s) trouvés -> $outFile"
 foreach ($f in $films) { Write-Host (" - {0} ({1})" -f $f.title, $f.year) }
 
-# --- 6. Notification téléphone (ntfy) ----------------------------------------
+# --- 6. Contenu de la notification téléphone (Web Push) -----------------------
 $names = ($films | Select-Object -First 5 | ForEach-Object { $_.title }) -join ' · '
 if ($films.Count -gt 5) { $names += ' …' }
 $notif = [ordered]@{
@@ -1010,19 +1009,11 @@ $notif = [ordered]@{
   message = if ($films) { $names } else { "Aucun film de ta watchlist ces $Days prochains jours." }
   click   = if ($PageUrl) { $PageUrl } else { 'https://leretroprojecteur.com/' }
 }
-$notif.actions = @(@{ action = 'view'; label = 'Ouvrir la page'; url = $notif.click })
 if ($NotifOut) {
   # + tous les films à l'affiche [slug, titre] : le relais en déduit la notif des autres utilisateurs (leur watchlist)
   $out = [ordered]@{}; foreach ($k in $notif.Keys) { $out[$k] = $notif[$k] }
   $out.films = [object[]]@(@($results.Values) + @($others.Values) | Where-Object { $_.slug } | ForEach-Object { , [object[]]@($_.slug, $_.title) })
   [IO.File]::WriteAllText($NotifOut, ($out | ConvertTo-Json -Depth 4 -Compress), (New-Object Text.UTF8Encoding($false)))
-}
-if ($NtfyTopic) {
-  $notif.topic = $NtfyTopic
-  $payload = $notif | ConvertTo-Json -Depth 4
-  Invoke-RestMethod -Uri 'https://ntfy.sh/' -Method Post -ContentType 'application/json; charset=utf-8' `
-    -Body ([Text.Encoding]::UTF8.GetBytes($payload)) | Out-Null
-  Write-Host "Notification ntfy envoyée"
 }
 
 if (-not $NoOpen) { Start-Process $outFile }

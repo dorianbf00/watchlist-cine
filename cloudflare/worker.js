@@ -8,7 +8,7 @@
 //      fresh   : dernière mise à jour il y a moins de 10 min (rien à faire, la page est à jour)
 //      error   : souci côté GitHub (token expiré, etc.)
 //
-// 2. Notifications Web Push (remplacent ntfy : la notif porte l'icône de l'appli)
+// 2. Notifications Web Push (la notif porte l'icône de l'appli)
 //    GET  /push/key          clé publique VAPID (la paire est créée au 1er appel et rangée dans le KV)
 //    POST /push/subscribe    la page enregistre l'abonnement du téléphone (+ notif de bienvenue)
 //    POST /push/unsubscribe  { endpoint } : la page désactive les notifs

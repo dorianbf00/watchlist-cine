@@ -915,7 +915,7 @@ async function syncWl(refresh = false) {
 if (ME) syncWl();
 else if (!store.get('lbAsked') && !store.get('lbUser')) askUser();
 
-// --- Notifications Web Push : l'icône de l'appli au lieu de celle de ntfy ------------------------
+// --- Notifications Web Push : l'icône de l'appli dans la notif ------------------------
 // Le relais Cloudflare garde les abonnements et envoie les notifs (voir cloudflare/worker.js).
 (async () => {
   const box = $('#notif'), btn = $('#notif-toggle'), hint = $('#notif-hint');
