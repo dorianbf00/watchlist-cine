@@ -210,30 +210,30 @@ html.need-user #app { visibility: hidden; }
 .wl-wall { position: absolute; inset: -20% -40%; display: flex; flex-direction: column; justify-content: center; gap: 12px; transform: rotate(-9deg); pointer-events: none; }
 .wl-row { display: flex; gap: 12px; width: max-content; animation: wlSlide var(--dur, 80s) linear infinite; }
 .wl-row:nth-child(even) { animation-direction: reverse; }
-.wl-row img { height: 19vh; min-height: 120px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 10px; background: #1a1a1c; display: block; }
+.wl-row img { height: 19vh; min-height: 120px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 0; background: #1a1a1c; display: block; }
 @keyframes wlSlide { to { transform: translateX(-50%); } }
 @media (prefers-reduced-motion: reduce) { .wl-row { animation: none; } }
 .welcome::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, #03030333 0%, #03030399 100%); pointer-events: none; }
 /* Carte en verre liquide (comme les fiches de film), plus transparente */
-.wl-card { position: relative; z-index: 1; width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; text-align: center;
-  padding: 30px 22px 22px; border-radius: 24px; color: var(--ink);
+/* Déborde de 60px de chaque côté : le flou reste uniforme jusqu'aux bords de l'écran */
+.wl-card { position: absolute; inset: -60px; z-index: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+  padding: calc(84px + env(safe-area-inset-top)) 84px calc(84px + env(safe-area-inset-bottom)); color: var(--ink);
   background: var(--wl-glass); -webkit-backdrop-filter: blur(22px) saturate(180%); backdrop-filter: blur(22px) saturate(180%);
-  box-shadow: 0 20px 60px -15px #000a, inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px #ffffff26; }
+  box-shadow: inset 0 0 120px #ffffff14; }
+.wl-card > * { width: 100%; max-width: 360px; }
 :root { --wl-glass: #ffffff8c; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wl-glass: #16161873; } }
 :root[data-theme="dark"] { --wl-glass: #16161873; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .wl-card { background: var(--bg); } }
-.welcome .wl-logo { width: 76px; margin-bottom: 12px; }
+.welcome .wl-logo { width: 96px; max-width: 96px; margin-bottom: 22px; }
 .welcome .wl-logo svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 6px 14px #C8F00055); }
-.welcome .wl-name { margin: 0 0 10px; font-size: 40px; line-height: .9; background: var(--lime-grad); -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 1px 0 #0000004d) drop-shadow(0 4px 12px #0000002e); }
 .welcome .wl-desc { margin: 0 0 20px; font-size: 14px; max-width: 300px; color: var(--ink); opacity: .78; }
 .welcome form { display: flex; gap: 8px; width: 100%; }
-.welcome input { flex: 1; min-width: 0; border: 1px solid #ffffff59; background: #ffffff33; color: var(--ink); padding: 10px 14px; font: 500 17px var(--sans); border-radius: 999px; }
+.welcome input { flex: 1; min-width: 0; border: 1px solid #ffffff59; background: #ffffff33; color: var(--ink); padding: 10px 14px; font: 500 17px var(--sans); border-radius: 0; }
 .welcome input::placeholder { color: var(--ink); opacity: .55; }
 .welcome input:focus { outline: 2px solid var(--elec); outline-offset: -1px; }
-.welcome .go { background: var(--elec-grad); color: var(--on-elec); border-color: var(--elec); padding: 10px 18px; border-radius: 999px; }
-.welcome .wl-cancel { margin-top: 12px; border-radius: 999px; color: var(--ink); }
+.welcome .go { background: var(--elec-grad); color: var(--on-elec); border-color: var(--elec); padding: 10px 18px; border-radius: 0; flex: none; }
+.welcome .wl-cancel { width: auto; margin-top: 12px; border-radius: 0; color: var(--ink); }
 .welcome .wl-cancel[hidden] { display: none; }
 .welcome .msg { min-height: 20px; margin: 14px 0 0; font-size: 13px; color: var(--ink); opacity: .7; }
 .welcome .msg.err { color: var(--red); opacity: 1; }
@@ -367,11 +367,10 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
 <div class="fs-scrim" id="fs-scrim"></div>
 <div class="fsheet" id="fsheet" role="dialog" aria-modal="true" aria-label="Fiche du film"></div>
 <div class="ptr-pill" id="ptr-pill" role="status" aria-live="polite"><i></i><span>Mise à jour…</span></div>
-<div class="welcome" id="welcome" hidden role="dialog" aria-modal="true" aria-labelledby="wl-title">
+<div class="welcome" id="welcome" hidden role="dialog" aria-modal="true" aria-label="Watchlist au ciné : connexion">
   <div class="wl-wall" id="wl-wall" aria-hidden="true"></div>
   <div class="wl-card">
   <div class="wl-logo" id="wl-logo" aria-hidden="true"></div>
-  <h2 class="display wl-name" id="wl-title">Watchlist</h2>
   <p class="wl-desc">Les films de ta watchlist Letterboxd à l’affiche à Paris cette semaine (cinémas carte UGC Illimité).</p>
   <form id="wl-form"><input id="wl-in" placeholder="ton pseudo Letterboxd" aria-label="Ton pseudo Letterboxd" autocomplete="username" autocapitalize="off" spellcheck="false" enterkeyhint="go"><button class="chip go">Voir</button></form>
   <button class="chip wl-cancel" id="wl-cancel" type="button" hidden>Annuler</button>
