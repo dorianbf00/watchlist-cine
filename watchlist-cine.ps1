@@ -801,7 +801,15 @@ function Get-UgcShowings([int]$cid, [string]$iso) {
     if ($hh.Count -lt 2) { continue }
     [void]$list.Add([object[]]@((Get-DataAttr $tag 'film'), (Get-DataAttr $tag 'filmid'), ([int]$hh[0] * 60 + [int]$hh[1]), $m.Groups[1].Value))
   }
-  $script:bookCache[$key] = [pscustomobject]@{ t = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss'); s = [object[]]$list }
+  if (-not $script:ugcDiag) {
+    # Diagnostic (une fois par passage) : ce que renvoie UGC aux serveurs GitHub
+    $script:ugcDiag = $true
+    $ti = [regex]::Match($html, '<title>([^<]*)</title>').Groups[1].Value
+    Write-Host ("UGC salle {0} {1} : {2} octets, {3} séance(s), titre « {4} », début : {5}" -f $cid, $iso, $html.Length, $list.Count, $ti,
+      ($html.Substring(0, [math]::Min(300, $html.Length)) -replace '\s+', ' '))
+  }
+  # Programme vide (page de blocage, jour sans séance) : pas mis en cache, on réessaiera au prochain passage
+  if ($list.Count) { $script:bookCache[$key] = [pscustomobject]@{ t = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss'); s = [object[]]$list } }
   return , @($list)
 }
 
