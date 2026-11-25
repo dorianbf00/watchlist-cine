@@ -106,7 +106,7 @@ jobs:
       - name: Notification téléphone (ntfy)
         if: ${{ env.NTFY_TOPIC != '' }}
         run: |
-          jq --arg t "$NTFY_TOPIC" '. + {topic: $t}' notif.json \
+          jq --arg t "$NTFY_TOPIC" 'del(.films) + {topic: $t}' notif.json \
             | curl -sf -H "Content-Type: application/json" --data-binary @- https://ntfy.sh/ > /dev/null
           echo "Notification envoyée"
       # Notif Web Push (icône de l'appli) : le relais Cloudflare l'envoie à chaque téléphone abonné depuis la page
