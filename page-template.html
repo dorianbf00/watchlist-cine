@@ -51,19 +51,13 @@ button { font: inherit; color: inherit; cursor: pointer; border-radius: 0; }
 .logo-wrap { margin: 6px 0 2px; display: flex; justify-content: center; perspective: 700px; }
 .logo { width: 64px; height: auto; display: block; transform-style: preserve-3d; will-change: transform;
   filter: drop-shadow(0 6px 14px #C8F00038); }
-/* Tirer pour actualiser : la page descend et le W s'étire vers le haut (son sommet reste en place),
-   puis tout revient en rebondissant. Rien derrière la page : même fond, aucun bord. */
+/* Tirer pour actualiser : la page descend et le W tourne sur lui-même au rythme du doigt (un tour au seuil),
+   puis il finit sa rotation en remontant. Rien derrière la page : même fond, aucun bord. */
 html, body { overscroll-behavior-y: none; }
 #app { position: relative; z-index: 1; background: var(--bg); }
 #app.ptr-live { will-change: transform; }
-/* Le W s'étire DANS le SVG (groupe .logo-shape) : redessiné en vectoriel à chaque image, donc toujours net */
-/* Réserve de place AU-DESSUS du W dans le SVG (viewBox démarre à -220) : iOS coupe ce qui déborde du SVG.
-   La marge négative annule cette réserve dans la mise en page : le W reste à la même place. */
-.logo { overflow: visible; pointer-events: none; margin-top: calc(-64px * 220 / 96.774); }
-.logo-shape { transform-box: fill-box; transform-origin: 50% 100%; }
-#app.ptr-anim { transition: transform .6s cubic-bezier(.34, 1.5, .64, 1); }
-#app.ptr-anim .logo-shape { transition: transform .6s cubic-bezier(.34, 1.7, .64, 1); }
-#app.ptr-anim .logo { transition: filter .3s; }
+#app.ptr-anim { transition: transform .55s cubic-bezier(.2, .8, .2, 1); }
+#app.ptr-anim .logo { transition: transform .7s cubic-bezier(.2, .8, .2, 1), filter .3s; }
 html.ptr-ready #app .logo { filter: drop-shadow(0 8px 22px #C8F00099); transition: filter .25s; }
 /* Mise à jour en cours : la page reste utilisable, une pastille jaune-vert attend en bas */
 .ptr-pill { position: fixed; z-index: 20; bottom: calc(env(safe-area-inset-bottom) + 18px); left: 50%; pointer-events: none;
@@ -337,7 +331,7 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
 <div id="app">
 <header class="masthead wrap">
   <h1 class="logo-wrap"><span class="sr">Watchlist</span>
-    <svg class="logo" id="logo" aria-hidden="true" viewBox="0 -220 96.774 295"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><g class="logo-shape" id="logo-shape"><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></g></svg>
+    <svg class="logo" id="logo" aria-hidden="true" viewBox="0 0 96.774 75"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></svg>
   </h1>
   <p class="sub" id="sub"></p>
 </header>
@@ -840,27 +834,27 @@ render();
   });
 })();
 
-// --- Tirer pour actualiser : la page descend, le W s'étire vers le haut au rythme du doigt -------
-// Performance : #app bouge en transform (carte graphique) ; le W est étiré dans le SVG (vectoriel, reste net). Une mise à jour par image.
+// --- Tirer pour actualiser : la page descend, le W tourne au rythme du doigt -------------------
+// Performance : seuls #app et le logo bougent, en transform (carte graphique), une mise à jour par image.
 (() => {
-  const root = document.documentElement, app = $('#app'), logo = $('#logo'), shape = $('#logo-shape');
+  const root = document.documentElement, app = $('#app'), logo = $('#logo');
   const TH = 80;                       // distance (après résistance) pour déclencher l'actualisation
-  let y0 = null, pull = 0, active = false, frame = 0, next = null, LH = 0;
+  let y0 = null, pull = 0, active = false, frame = 0, next = null;
   const apply = () => {
     frame = 0;
     if (next == null) return;
-    const p = next; next = null;
+    const [p, deg] = next; next = null;
     app.style.transform = p ? `translate3d(0, ${p}px, 0)` : '';
-    // le bas du W suit la page, son sommet reste en place : il s'étire d'autant que la page descend
-    shape.style.transform = p ? `scaleY(${1 + p / LH})` : '';
+    logo.style.transform = deg ? `rotateY(${deg}deg)` : '';
   };
-  const set = (p, now) => {
-    next = p;
+  const set = (p, deg, now) => {
+    next = [p, deg];
     if (now) { if (frame) cancelAnimationFrame(frame); apply(); }
     else if (!frame) frame = requestAnimationFrame(apply);
   };
   const setState = (cls, on) => { if (root.classList.contains(cls) !== on) root.classList.toggle(cls, on); };
-  const reset = () => { app.classList.remove('ptr-anim', 'ptr-live'); setState('ptr-ready', false); };
+  // fin de l'animation : on remet l'angle à 0 sans transition (un nombre entier de tours, rien ne bouge à l'écran)
+  const reset = () => { app.classList.remove('ptr-anim', 'ptr-live'); setState('ptr-ready', false); set(0, 0, true); };
   addEventListener('touchstart', (e) => {
     if (scrollY > 0 || e.touches.length > 1 || root.classList.contains('ptr-wait')) return;
     y0 = e.touches[0].clientY; active = false; pull = 0;
@@ -871,12 +865,12 @@ render();
     if (!active) {
       if (dy < 0 || scrollY > 0) { y0 = null; return; }   // geste vers le haut : défilement normal
       if (dy <= 6) return;
-      active = true; LH = (logo.getBoundingClientRect().width || 64) * 75 / 96.774;   // hauteur du W seul
+      active = true;
       app.classList.remove('ptr-anim'); app.classList.add('ptr-live');
     }
     if (e.cancelable) e.preventDefault();               // on garde la main sur le geste
     pull = Math.max(0, Math.min(140, (dy - 6) * 0.5));  // résistance élastique
-    set(pull);
+    set(pull, (pull / TH) * 360);                       // un tour complet au seuil
     setState('ptr-ready', pull >= TH);
   }, { passive: false });
   const end = () => {
@@ -884,10 +878,11 @@ render();
     y0 = null;
     if (!active) return;
     active = false;
-    // Retour en rebond (léger écrasement du W en fin de course)
+    // La page remonte ; le W finit son tour (comme une toupie), deux tours de plus si on actualise
+    const deg = (pull / TH) * 360;
     app.classList.add('ptr-anim');
-    set(0, true);
-    setTimeout(reset, 650);
+    set(0, Math.ceil(deg / 360) * 360 + (pull >= TH ? 720 : 0), true);
+    setTimeout(reset, 720);
     if (pull >= TH) refresh();
     pull = 0;
   };
