@@ -57,8 +57,10 @@ html, body { overscroll-behavior-y: none; }
 #app { position: relative; z-index: 1; background: var(--bg); }
 #app.ptr-live { will-change: transform; }
 /* Le W s'étire DANS le SVG (groupe .logo-shape) : redessiné en vectoriel à chaque image, donc toujours net */
-.logo { overflow: visible; }
-.logo-shape { transform-box: view-box; transform-origin: 50% 100%; }
+/* Réserve de place AU-DESSUS du W dans le SVG (viewBox démarre à -220) : iOS coupe ce qui déborde du SVG.
+   La marge négative annule cette réserve dans la mise en page : le W reste à la même place. */
+.logo { overflow: visible; pointer-events: none; margin-top: calc(-64px * 220 / 96.774); }
+.logo-shape { transform-box: fill-box; transform-origin: 50% 100%; }
 #app.ptr-anim { transition: transform .6s cubic-bezier(.34, 1.5, .64, 1); }
 #app.ptr-anim .logo-shape { transition: transform .6s cubic-bezier(.34, 1.7, .64, 1); }
 #app.ptr-anim .logo { transition: filter .3s; }
@@ -331,7 +333,7 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
 <div id="app">
 <header class="masthead wrap">
   <h1 class="logo-wrap"><span class="sr">Watchlist</span>
-    <svg class="logo" id="logo" aria-hidden="true" viewBox="0 0 96.774 75"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><g class="logo-shape" id="logo-shape"><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></g></svg>
+    <svg class="logo" id="logo" aria-hidden="true" viewBox="0 -220 96.774 295"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><g class="logo-shape" id="logo-shape"><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></g></svg>
   </h1>
   <p class="sub" id="sub"></p>
 </header>
@@ -782,7 +784,7 @@ render();
     if (!active) {
       if (dy < 0 || scrollY > 0) { y0 = null; return; }   // geste vers le haut : défilement normal
       if (dy <= 6) return;
-      active = true; LH = logo.getBoundingClientRect().height || 50;
+      active = true; LH = (logo.getBoundingClientRect().width || 64) * 75 / 96.774;   // hauteur du W seul
       app.classList.remove('ptr-anim'); app.classList.add('ptr-live');
     }
     if (e.cancelable) e.preventDefault();               // on garde la main sur le geste
