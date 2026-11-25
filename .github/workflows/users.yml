@@ -1,0 +1,32 @@
+name: Watchlists des autres utilisateurs
+
+# Les autres utilisateurs de la page (pseudo Letterboxd saisi dans la page) : on récupère leur watchlist
+# et on la confie au relais Cloudflare. Les séances, elles, viennent de la page générée pour tous.
+on:
+  schedule:
+    - cron: "37 4-22 * * *"   # toutes les heures (5h-23h à Paris) : watchlists vérifiées il y a plus de 6 h
+  workflow_dispatch:           # lancé par le relais pour un nouveau pseudo, ou au "tirer pour actualiser"
+    inputs:
+      user:
+        description: "pseudo Letterboxd (vide = tous ceux à rafraîchir)"
+        default: ""
+
+concurrency:
+  # Un passage par pseudo à la fois (les nouveaux pseudos ne s'annulent pas entre eux)
+  group: users-${{ inputs.user || 'all' }}
+  cancel-in-progress: false
+
+jobs:
+  watchlists:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: users-watchlists.sh
+          sparse-checkout-cone-mode: false
+      - name: Récupérer les watchlists
+        env:
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          ONE_USER: ${{ inputs.user }}
+        run: ./users-watchlists.sh "$ONE_USER"

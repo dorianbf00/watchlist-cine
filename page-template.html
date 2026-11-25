@@ -206,6 +206,19 @@ html.ptr-wait .ptr-pill { opacity: 1; transform: translate(-50%, 0) scale(1); }
 .empty b { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 28px; text-transform: uppercase; margin-bottom: 4px; }
 footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding: 0 0 calc(28px + env(safe-area-inset-bottom)); }
 /* Notifications Web Push (iPhone : seulement depuis l'appli ajoutée à l'écran d'accueil) */
+/* Watchlist d'un autre pseudo Letterboxd : invitation, saisie, attente */
+.who { border-bottom: 1px solid var(--line); padding: 12px 0; font-size: 13px; color: var(--gray); }
+.who[hidden] { display: none; }
+.who p { margin: 0 0 8px; }
+.who b { color: var(--ink); }
+.who form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.who input { flex: 1 1 160px; min-width: 0; border: 1px solid var(--line); background: transparent; color: var(--ink); padding: 6px 10px; font: 500 16px var(--sans); border-radius: 0; }
+.who input:focus { outline: 2px solid var(--elec); outline-offset: -1px; }
+.who .go { background: var(--elec-grad); color: var(--on-elec); border-color: var(--elec); }
+.who .err { color: var(--red); }
+.who .spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid var(--elec-text); border-right-color: transparent; border-radius: 50%; animation: whoSpin .8s linear infinite; vertical-align: -1px; }
+@keyframes whoSpin { to { transform: rotate(1turn); } }
+.foot-who { background: none; border: 0; padding: 0; font-size: inherit; text-transform: inherit; color: var(--elec-text); text-decoration: underline; text-underline-offset: 2px; }
 .notif { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 14px; }
 .notif[hidden] { display: none; }
 .notif-hint { text-transform: none; }
@@ -340,6 +353,7 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
     <svg class="logo" id="logo" aria-hidden="true" viewBox="0 -220 96.774 295"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><g class="logo-shape" id="logo-shape"><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></g></svg>
   </h1>
   <p class="sub" id="sub"></p>
+  <div class="who" id="who" hidden></div>
 </header>
 
 <div class="bar">
@@ -393,6 +407,52 @@ function arr(zip) {
   if (!m) return esc(zip);
   const n = Number(m[1] ? 16 : m[2]);
   return n === 1 ? '1<sup>er</sup>' : `${n}<sup>e</sup>`;
+}
+
+// --- Watchlist affichée : la tienne (DATA.user) ou celle d'un autre pseudo Letterboxd ----------------
+// Les séances sont communes à tous ; pour un autre pseudo, on répartit les films selon SA watchlist
+// (identifiant de fiche Letterboxd), gardée dans ce téléphone et rafraîchie via le relais Cloudflare.
+const OWNER = DATA.user;
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+};
+// Accepte "pseudo", "@pseudo" ou un lien letterboxd.com/pseudo/…
+const cleanUser = (u) => {
+  const s = String(u || '').trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/^letterboxd\.com\//, '').replace(/^@/, '').split(/[/?#]/)[0];
+  return /^[a-z0-9_]{2,30}$/.test(s) ? s : '';
+};
+{
+  const q = new URLSearchParams(location.search).get('u');
+  if (q != null) { const u = cleanUser(q); store.set('lbUser', u && u !== OWNER ? u : null); store.set('lbAsked', '1'); }
+}
+let ME = cleanUser(store.get('lbUser'));
+if (ME === OWNER) ME = '';
+const readWl = (u) => { try { return JSON.parse(store.get('wl:' + u)); } catch { return null; } };
+const myWl = ME ? readWl(ME) : null;
+if (ME) {
+  // Un film par fiche Letterboxd (le Rétro Projecteur a parfois 2 fiches pour le même film)
+  const bySlug = new Map(), all = [];
+  for (const f of [...(DATA.films || []), ...(DATA.others || [])]) {
+    delete f.seen; delete f.match; delete f.why; delete f.pred;   // tes notes à toi : rien à voir avec ce pseudo
+    const twin = f.slug && bySlug.get(f.slug);
+    if (!twin) { if (f.slug) bySlug.set(f.slug, f); all.push(f); continue; }
+    for (const se of f.seances) {
+      const same = twin.seances.find((x) => x.date === se.date && x.theater === se.theater);
+      if (!same) { twin.seances.push(se); continue; }
+      // Horaires fusionnés (avec leurs fichiers calendrier / liens de réservation)
+      se.times.forEach((t, k) => {
+        if (same.times.includes(t)) return;
+        same.times.push(t);
+        if (same.ics && se.ics) same.ics.push(se.ics[k]);
+        if (same.book && se.book) same.book.push(se.book[k]);
+      });
+    }
+  }
+  const mine = new Set(myWl?.slugs || []);
+  DATA.films = all.filter((f) => f.slug && mine.has(f.slug));
+  DATA.others = all.filter((f) => !(f.slug && mine.has(f.slug)));
+  DATA.user = ME; DATA.watchlistCount = myWl?.count ?? 0;
 }
 
 const state = { day: null, bank: 'all', classics: false, showOthers: true };
@@ -462,11 +522,11 @@ function renderList() {
   const groups = [
     { g: 0, title: 'Déjà vus', sub: 'triés par ta note' },
     { g: 1, title: 'Pour toi', sub: 'du plus probable au moins probable de te plaire, d’après tes notes Letterboxd' },
-    { g: 2, title: 'Le reste', sub: 'pas de fiche Letterboxd pour les évaluer' },
+    ME ? { g: 2, title: 'À l’affiche', sub: 'par année de sortie' } : { g: 2, title: 'Le reste', sub: 'pas de fiche Letterboxd pour les évaluer' },
   ];
   $('#others').innerHTML = n ? `
     <div class="others-head"><h2 class="display">Aussi à l'affiche</h2>
-      <p>${n} autre${n > 1 ? 's' : ''} film${n > 1 ? 's' : ''} hors de ta watchlist · trié pour toi · touche une affiche pour voir les séances</p></div>
+      <p>${n} autre${n > 1 ? 's' : ''} film${n > 1 ? 's' : ''} hors de ta watchlist${ME ? '' : ' · trié pour toi'} · touche une affiche pour voir les séances</p></div>
     ${groups.map(({ g, title, sub }) => {
       const items = othersShown.map((x, i) => ({ x, i })).filter(({ x }) => groupOf(x.f) === g);
       return items.length ? `<div class="ogroup"><h3>${title} <span>${items.length}</span></h3><p>${sub}</p></div>
@@ -786,11 +846,80 @@ document.addEventListener('click', (e) => {
 const gen = new Date(DATA.generated);
 const nWeek = films.filter((f) => f.seances.some((s) => DAYS.includes(s.date))).length;
 $('#sub').textContent = `${nWeek} film${nWeek > 1 ? 's' : ''} de ta watchlist à l'affiche · du ${fr(parseDay(DAYS[0]), { day: 'numeric', month: 'long' })} au ${fr(parseDay(DAYS.at(-1)), { day: 'numeric', month: 'long' })}`;
-$('#foot').textContent = `Mis à jour le ${fr(gen, { weekday: 'long', day: 'numeric', month: 'long' })} à ${pad(gen.getHours())}h${pad(gen.getMinutes())} · ${DATA.watchlistCount} films dans la watchlist de ${DATA.user}`;
+$('#foot').innerHTML = `Mis à jour le ${esc(fr(gen, { weekday: 'long', day: 'numeric', month: 'long' }))} à ${pad(gen.getHours())}h${pad(gen.getMinutes())} · ${DATA.watchlistCount} films dans la watchlist de ${esc(DATA.user)} · <button class="foot-who" id="foot-who">Changer de watchlist</button>`;
 $('#others-toggle').setAttribute('aria-pressed', state.showOthers);
 let saved = null; try { saved = sessionStorage.getItem('day'); } catch {}
 state.day = DAYS.includes(saved) ? saved : DAYS.includes(todayIso) ? todayIso : DAYS[0];
 render();
+
+// --- Choix de la watchlist (pseudo Letterboxd) ---------------------------------------------------
+const relay = (p, body) => fetch(REFRESH_URL + p, body
+  ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  : { cache: 'no-store' }).then((r) => r.json());
+const who = $('#who');
+function askUser(msg = '', isErr = false) {
+  who.hidden = false;
+  who.innerHTML = `<p>${isErr ? `<span class="err">${esc(msg)}</span>` : msg || (ME ? 'Voir une autre watchlist Letterboxd :' : `Tu vois la watchlist Letterboxd de <b>${esc(DATA.user)}</b>. Pour voir <b>la tienne</b> au ciné cette semaine :`)}</p>
+    <form id="who-form"><input id="who-in" name="u" placeholder="pseudo Letterboxd" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" value="${esc(ME)}">
+      <button class="chip go">Voir</button>${ME ? `<button class="chip" type="button" data-u="${esc(OWNER)}">Revenir à ${esc(OWNER)}</button>` : ''}<button class="chip" type="button" data-u="">${ME ? 'Annuler' : 'Non merci'}</button></form>`;
+}
+function useUser(u) {
+  store.set('lbAsked', '1');
+  if (u === null) { who.hidden = true; return; }
+  store.set('lbUser', u && u !== OWNER ? u : null);
+  // Lien partageable / écran d'accueil : le pseudo voyage dans l'adresse
+  const url = new URL(location.href); url.searchParams.delete('u'); if (u && u !== OWNER) url.searchParams.set('u', u);
+  location.replace(url.href);
+}
+who.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const u = cleanUser($('#who-in').value);
+  if (!u) { askUser('Pseudo invalide : celui de ton profil, letterboxd.com/pseudo', true); return; }
+  if (ME && u === ME) { who.hidden = true; return; }
+  useUser(u);
+});
+who.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-u]');
+  if (b) useUser(b.dataset.u || null);   // "Non merci" / "Annuler" : on garde la watchlist actuelle
+});
+document.addEventListener('click', (e) => { if (e.target.closest('#foot-who')) { askUser(); who.scrollIntoView({ block: 'center', behavior: 'smooth' }); $('#who-in').focus(); } });
+
+// Watchlist de l'autre pseudo : enregistrée auprès du relais, récupérée par GitHub Actions (≈ 1 min la 1re fois)
+async function syncWl(refresh = false) {
+  if (!ME || !REFRESH_URL) return null;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let r;
+  try { r = await relay('user', { user: ME, refresh }); } catch { return null; }
+  const fresh = (x) => x?.state === 'ready' && x.updated !== myWl?.updated;
+  const save = (x) => { store.set('wl:' + ME, JSON.stringify({ updated: x.updated, count: x.count, slugs: x.slugs })); };
+  if (r.state === 'notfound') {
+    store.set('lbUser', null); store.set('wl:' + ME, null);
+    askUser(`Pseudo « ${ME} » introuvable sur Letterboxd, ou watchlist privée.`, true);
+    return null;
+  }
+  if (r.state === 'ready' && !r.refreshing) { if (fresh(r)) { save(r); location.reload(); } return r; }
+  if (r.state !== 'pending' && !r.refreshing) return null;
+  if (r.state === 'pending') {
+    who.hidden = false;
+    who.innerHTML = `<p><span class="spin"></span>On récupère la watchlist Letterboxd de <b>${esc(ME)}</b>… (environ 1 min la première fois)</p>`;
+  }
+  // On guette la watchlist (le workflow la dépose dans le relais)
+  const t0 = Date.now(), before = r.checked;
+  while (Date.now() - t0 < 4 * 60e3) {
+    await wait(6e3);
+    let x; try { x = await relay('wl?u=' + ME); } catch { continue; }
+    if (x.state === 'notfound') return syncWl();
+    if (x.state === 'ready' && x.checked !== before) {   // watchlist relue (changée ou non)
+      if (x.updated !== myWl?.updated) { save(x); location.reload(); }
+      else if (r.state === 'pending') location.reload();
+      return x;
+    }
+  }
+  if (r.state === 'pending') who.innerHTML = `<p class="err">Letterboxd ne répond pas pour l’instant. Tire la page vers le bas pour réessayer.</p>`;
+  return r;
+}
+if (ME) syncWl();
+else if (!store.get('lbAsked') && !store.get('lbUser')) askUser();
 
 // --- Notifications Web Push : l'icône de l'appli au lieu de celle de ntfy ------------------------
 // Le relais Cloudflare garde les abonnements et envoie les notifs (voir cloudflare/worker.js).
@@ -815,6 +944,10 @@ render();
   const keyP = api('push/key').catch(() => ({}));   // chargée d'avance : iOS veut l'abonnement dans la foulée du toucher
   let sub = await reg.pushManager.getSubscription();
   show(!!sub && Notification.permission === 'granted');
+  // Watchlist changée sur ce téléphone : l'abonnement suit le nouveau pseudo
+  if (sub && Notification.permission === 'granted' && store.get('pushUser') !== (ME || OWNER)) {
+    api('push/subscribe', { ...sub.toJSON(), user: ME || OWNER }).then((r) => { if (r.ok) store.set('pushUser', ME || OWNER); }).catch(() => {});
+  }
   if (Notification.permission === 'denied') say('Notifications bloquées dans les réglages du téléphone.');
   btn.addEventListener('click', async () => {
     btn.disabled = true; say('');
@@ -831,8 +964,9 @@ render();
         const { key } = await keyP;
         if (!key) throw new Error('clé VAPID indisponible');
         sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
-        const r = await api('push/subscribe', sub.toJSON());
+        const r = await api('push/subscribe', { ...sub.toJSON(), user: ME || OWNER });
         if (!r.ok) throw new Error(r.message || 'relais');
+        store.set('pushUser', ME || OWNER);
         show(true); say('Activées');
       }
     } catch (e) { say('Échec, réessaie plus tard'); console.warn(e); }
@@ -909,7 +1043,14 @@ render();
     const t0 = Date.now();
     let state = null;
     if (REFRESH_URL) {
+      const wl = syncWl(true);   // autre pseudo : relit aussi sa watchlist (recharge la page si elle a changé)
       try { state = (await (await fetch(REFRESH_URL, { method: 'POST' })).json()).state; } catch {}
+      if (ME && state !== 'started' && state !== 'running') {
+        // Séances déjà fraîches : on attend juste la watchlist (au plus ~1 min 30)
+        sayPill('Mise à jour…'); setState('ptr-wait', true);
+        await Promise.race([wl, wait(90e3)]);
+        return location.reload();
+      }
     }
     if (state !== 'started' && state !== 'running') {
       // Pas de relais, ou mise à jour toute fraîche (< 10 min) : la page publiée est déjà la bonne
