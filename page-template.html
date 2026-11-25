@@ -781,7 +781,7 @@ let saved = null; try { saved = sessionStorage.getItem('day'); } catch {}
 state.day = DAYS.includes(saved) ? saved : DAYS.includes(todayIso) ? todayIso : DAYS[0];
 render();
 
-// --- Notifications Web Push : l'icône de l'appli au lieu de celle de ntfy ------------------------
+// --- Notifications Web Push : l'icône de l'appli dans la notif ------------------------
 // Le relais Cloudflare garde les abonnements et envoie les notifs (voir cloudflare/worker.js).
 (async () => {
   const box = $('#notif'), btn = $('#notif-toggle'), hint = $('#notif-hint');
