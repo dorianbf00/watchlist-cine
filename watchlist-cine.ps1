@@ -832,56 +832,85 @@ function Get-Mk2Showings([string]$cx) {
   return , @($list)
 }
 
-# Même film ? Titre du cinéma (souvent en capitales, parfois sans le sous-titre) vs titre / titre original RP
+# Même film ? Titre du cinéma (souvent en capitales, parfois sans le sous-titre) vs titre / titre original RP.
+# Résultats mémorisés : des milliers d'horaires partagent quelques dizaines de titres par salle.
+$tkMemo = @{}; $tbMemo = @{}
+function Get-TitleKeysMemo([string]$s) {
+  if (-not $tkMemo.ContainsKey($s)) { $tkMemo[$s] = Get-TitleKeys $s }
+  $tkMemo[$s]
+}
 function Test-BookTitle([string]$site, $f) {
-  $k = Get-TitleKeys $site
-  if (-not $k.Full) { return $false }
-  foreach ($t in @($f.title, $f.original)) {
-    if (-not $t) { continue }
-    $r = Get-TitleKeys $t
-    if (Test-SameFilm $k 0 $r 0) { return $true }
-    $a = $k.Full; $b = $r.Full
-    if ($a.Length -ge 4 -and $b.Length -ge 4 -and ($a.StartsWith($b) -or $b.StartsWith($a))) { return $true }
-    # Séance spéciale : "Comment fabrique-t-on l'image d'un film ? avec Les Reines du drame"
-    if ($b.Length -ge 8 -and $a.Contains($b)) { return $true }
+  $mk = "$site`n$($f.title)`n$($f.original)"
+  if ($tbMemo.ContainsKey($mk)) { return $tbMemo[$mk] }
+  $ok = $false
+  $k = Get-TitleKeysMemo $site
+  if ($k.Full) {
+    foreach ($tt in @($f.title, $f.original)) {
+      if (-not $tt) { continue }
+      $r = Get-TitleKeysMemo $tt
+      $a = $k.Full; $b = $r.Full
+      if ((Test-SameFilm $k 0 $r 0) -or
+          ($a.Length -ge 4 -and $b.Length -ge 4 -and ($a.StartsWith($b) -or $b.StartsWith($a))) -or
+          # Séance spéciale : "Comment fabrique-t-on l'image d'un film ? avec Les Reines du drame"
+          ($b.Length -ge 8 -and $a.Contains($b))) { $ok = $true; break }
+    }
   }
-  return $false
+  $tbMemo[$mk] = $ok
+  return $ok
 }
 
-# La séance du cinéma qui correspond à un horaire ($iTitle / $iMin : position du titre et des minutes)
-function Find-Booking($f, $shows, [int]$minute, [int]$iTitle, [int]$iMin) {
-  $atTime = @($shows | Where-Object { $_[$iMin] -eq $minute })
-  $hit = $atTime | Where-Object { Test-BookTitle $_[$iTitle] $f } | Select-Object -First 1
-  if ($hit) { return , $hit }
-  # Titres trop différents (ex. "Irish Travellers" / "Tin Castle") : on accepte la seule séance à cette heure,
-  # sauf si le film est au programme sous son titre (l'horaire du Rétro Projecteur serait alors périmé)
-  if ($atTime.Count -eq 1 -and -not ($shows | Where-Object { Test-BookTitle $_[$iTitle] $f } | Select-Object -First 1)) { return , $atTime[0] }
-  return $null
+# Programme d'une salle pour un jour, indexé une seule fois : séances par minute + titres (-> lien appli)
+$bookIdx = @{}
+function Get-BookIndex([string]$n, [string]$iso) {
+  $key = "$n|$iso"
+  if ($bookIdx.ContainsKey($key)) { return $bookIdx[$key] }
+  $rows = New-Object System.Collections.ArrayList   # [titre, lien appli, minutes, lien réservation]
+  if ($UgcIds.ContainsKey($n)) {
+    $cid = $UgcIds[$n]
+    foreach ($r in (Get-UgcShowings $cid $iso)) {
+      [void]$rows.Add([object[]]@("$($r[0])", "https://www.ugc.fr/film.html?id=$($r[1])&cinemaId=$cid", [int]$r[2],
+        "https://www.ugc.fr/reservationSeances.html?id=$($r[3])"))
+    }
+  } else {
+    $mk = $Mk2Ids[$n]
+    $want = @{}; foreach ($id in $mk.ids) { $want["$id|$iso"] = $id }
+    foreach ($r in (Get-Mk2Showings $mk.cx)) {
+      if (-not $want.ContainsKey("$($r[2])")) { continue }
+      [void]$rows.Add([object[]]@("$($r[0])", $(if ($r[1]) { "https://www.mk2.com/film/$($r[1])" } else { '' }), [int]$r[3],
+        "https://www.mk2.com/panier/seance/tickets?cinemaId=$($want["$($r[2])"])&sessionId=$($r[4])"))
+    }
+  }
+  $byMin = @{}; $titles = @{}
+  foreach ($r in $rows) {
+    if (-not $byMin.ContainsKey($r[2])) { $byMin[$r[2]] = New-Object System.Collections.ArrayList }
+    [void]$byMin[$r[2]].Add($r)
+    if (-not $titles.ContainsKey($r[0])) { $titles[$r[0]] = $r[1] }
+  }
+  $bookIdx[$key] = @{ byMin = $byMin; titles = $titles }
+  return $bookIdx[$key]
 }
 
 foreach ($f in @($results.Values) + @($others.Values)) {
   foreach ($s in $f.seances) {
     $n = Normalize $s.theater
-    $mins = @($s.times | ForEach-Object { [int][math]::Round([double]$_ * 60) })
-    if ($UgcIds.ContainsKey($n)) {
-      $cid = $UgcIds[$n]
-      $shows = Get-UgcShowings $cid $s.date
-      $same = $shows | Where-Object { Test-BookTitle $_[0] $f } | Select-Object -First 1
-      $s.app = if ($same) { "https://www.ugc.fr/film.html?id=$($same[1])&cinemaId=$cid" } else { "https://www.ugc.fr/cinema.html?id=$cid" }
-      $s.book = [object[]]@($mins | ForEach-Object {
-        $h = Find-Booking $f $shows $_ 0 2
-        if ($h) { "https://www.ugc.fr/reservationSeances.html?id=$($h[3])" } else { '' } })
-    } elseif ($Mk2Ids.ContainsKey($n)) {
-      $mk = $Mk2Ids[$n]
-      $all = Get-Mk2Showings $mk.cx
-      $keys = @($mk.ids | ForEach-Object { "$_|$($s.date)" })
-      $shows = @($all | Where-Object { $keys -contains $_[2] })
-      $same = $all | Where-Object { Test-BookTitle $_[0] $f } | Select-Object -First 1
-      $s.app = if ($same -and $same[1]) { "https://www.mk2.com/film/$($same[1])" } else { "https://www.mk2.com/salle/$($mk.page)" }
-      $s.book = [object[]]@($mins | ForEach-Object {
-        $h = Find-Booking $f $shows $_ 0 3
-        if ($h) { "https://www.mk2.com/panier/seance/tickets?cinemaId=$(($h[2] -split '\|')[0])&sessionId=$($h[4])" } else { '' } })
+    if (-not ($UgcIds.ContainsKey($n) -or $Mk2Ids.ContainsKey($n))) { continue }
+    $idx = Get-BookIndex $n $s.date
+    $app = $null
+    foreach ($tt in $idx.titles.Keys) { if ($idx.titles[$tt] -and (Test-BookTitle $tt $f)) { $app = $idx.titles[$tt]; break } }
+    $s.app = if ($app) { $app } elseif ($UgcIds.ContainsKey($n)) { "https://www.ugc.fr/cinema.html?id=$($UgcIds[$n])" } else { "https://www.mk2.com/salle/$($Mk2Ids[$n].page)" }
+    $book = @()
+    foreach ($tm in $s.times) {
+      $m = [int][math]::Round([double]$tm * 60)
+      $cands = @()
+      if ($idx.byMin.ContainsKey($m)) { $cands = $idx.byMin[$m].ToArray() }
+      $hit = $null
+      foreach ($c in $cands) { if (Test-BookTitle $c[0] $f) { $hit = $c; break } }
+      # Titres trop différents (ex. "Irish Travellers" / "Tin Castle") : on accepte la seule séance à cette heure,
+      # sauf si le film est au programme sous son titre (l'horaire du Rétro Projecteur serait alors périmé)
+      if (-not $hit -and $cands.Count -eq 1 -and -not $app) { $hit = $cands[0] }
+      $book += $(if ($hit) { $hit[3] } else { '' })
     }
+    $s.book = [object[]]$book
   }
 }
 $o = [ordered]@{}
