@@ -203,6 +203,10 @@ html.ptr-wait .ptr-pill { opacity: 1; transform: translate(-50%, 0) scale(1); }
 .empty { text-align: center; color: var(--gray); padding: 48px 12px; }
 .empty b { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 28px; text-transform: uppercase; margin-bottom: 4px; }
 footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding: 0 0 calc(28px + env(safe-area-inset-bottom)); }
+/* Notifications Web Push (iPhone : seulement depuis l'appli ajoutée à l'écran d'accueil) */
+.notif { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 14px; }
+.notif[hidden] { display: none; }
+.notif-hint { text-transform: none; }
 
 /* --- Animations (désactivées si "Réduire les animations" est activé sur l'appareil) --- */
 .bar { transition: box-shadow .3s ease; }
@@ -355,7 +359,13 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
   <div class="list" id="list"></div>
   <section id="others" aria-label="Autres films à l'affiche"></section>
 </main>
-<footer class="wrap" id="foot"></footer>
+<footer class="wrap">
+  <div class="notif" id="notif" hidden>
+    <button class="chip chip-toggle" id="notif-toggle" aria-pressed="false"><span class="sw" aria-hidden="true"></span>Notifications</button>
+    <span class="notif-hint" id="notif-hint"></span>
+  </div>
+  <div id="foot"></div>
+</footer>
 </div>
 
 
@@ -750,6 +760,54 @@ $('#others-toggle').setAttribute('aria-pressed', state.showOthers);
 let saved = null; try { saved = sessionStorage.getItem('day'); } catch {}
 state.day = DAYS.includes(saved) ? saved : DAYS.includes(todayIso) ? todayIso : DAYS[0];
 render();
+
+// --- Notifications Web Push : l'icône de l'appli au lieu de celle de ntfy ------------------------
+// Le relais Cloudflare garde les abonnements et envoie les notifs (voir cloudflare/worker.js).
+(async () => {
+  const box = $('#notif'), btn = $('#notif-toggle'), hint = $('#notif-hint');
+  const say = (t) => { hint.textContent = t; };
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (!REFRESH_URL || !('serviceWorker' in navigator)) {
+    if (isIOS && !standalone) { box.hidden = false; btn.style.display = 'none'; say('Pour les notifications : Partager → Sur l’écran d’accueil, puis ouvre l’appli.'); }
+    return;
+  }
+  let reg;
+  try { reg = await navigator.serviceWorker.register('sw.js'); } catch { return; }
+  if (!('PushManager' in window) || !('Notification' in window)) {
+    if (isIOS && !standalone) { box.hidden = false; btn.style.display = 'none'; say('Pour les notifications : Partager → Sur l’écran d’accueil, puis ouvre l’appli.'); }
+    return;
+  }
+  const api = (p, body) => fetch(REFRESH_URL + p, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}).then((r) => r.json());
+  const b64 = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+  const show = (on) => btn.setAttribute('aria-pressed', on);
+  box.hidden = false;
+  const keyP = api('push/key').catch(() => ({}));   // chargée d'avance : iOS veut l'abonnement dans la foulée du toucher
+  let sub = await reg.pushManager.getSubscription();
+  show(!!sub && Notification.permission === 'granted');
+  if (Notification.permission === 'denied') say('Notifications bloquées dans les réglages du téléphone.');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; say('');
+    try {
+      if (btn.getAttribute('aria-pressed') === 'true') {
+        sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await api('push/unsubscribe', { endpoint: sub.endpoint }).catch(() => {});
+          await sub.unsubscribe();
+        }
+        show(false); say('Notifications coupées');
+      } else {
+        if (await Notification.requestPermission() !== 'granted') { say('Notifications refusées'); return; }
+        const { key } = await keyP;
+        if (!key) throw new Error('clé VAPID indisponible');
+        sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
+        const r = await api('push/subscribe', sub.toJSON());
+        if (!r.ok) throw new Error(r.message || 'relais');
+        show(true); say('Activées');
+      }
+    } catch (e) { say('Échec, réessaie plus tard'); console.warn(e); }
+    finally { btn.disabled = false; }
+  });
+})();
 
 // --- Tirer pour actualiser : la page descend, le W s'étire vers le haut au rythme du doigt -------
 // Performance : #app bouge en transform (carte graphique) ; le W est étiré dans le SVG (vectoriel, reste net). Une mise à jour par image.

@@ -97,6 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -107,3 +108,10 @@ jobs:
           jq --arg t "$NTFY_TOPIC" '. + {topic: $t}' notif.json \
             | curl -sf -H "Content-Type: application/json" --data-binary @- https://ntfy.sh/ > /dev/null
           echo "Notification envoyée"
+      # Notif Web Push (icône de l'appli) : le relais Cloudflare l'envoie à chaque téléphone abonné depuis la page
+      - name: Notification téléphone (Web Push)
+        if: ${{ env.PUSH_SECRET != '' }}
+        run: |
+          curl -sSf -X POST -H "Authorization: Bearer $PUSH_SECRET" -H "Content-Type: application/json" \
+            --data-binary @notif.json https://watchlist-refresh.doriansublon.workers.dev/push/send
+          echo
