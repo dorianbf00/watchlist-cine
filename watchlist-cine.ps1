@@ -745,6 +745,194 @@ $infoMsg = ("Fiches film : {0} lues, {1} Rotten Tomatoes cherchés · synopsis {
 Write-Host $infoMsg
 if ($env:GITHUB_ACTIONS) { Write-Host "::notice title=Fiches film::$infoMsg" }
 
+# --- 3f. Liens de réservation UGC / mk2 --------------------------------------
+# Toucher un horaire dans une salle UGC ou mk2 ouvre la réservation de CETTE séance (ugc.fr / mk2.com).
+# On retrouve la séance chez le cinéma par salle + jour + heure (+ titre). Sinon : la page du film dans
+# ce cinéma (ou la page du cinéma), liens qui ouvrent les applis UGC / mk2 sur iPhone.
+# Cache book-cache.json (2 h) : les programmes des cinémas ne bougent pas d'une heure à l'autre.
+$UgcIds = @{ ugcleshalles = 10; ugcbercy = 12; ugcmaillot = 7; ugcmontparnasse = 14; ugcrotonde = 15; ugcodeon = 13
+  ugcdanton = 4; ugclyonbastille = 11; ugcgobelins = 5; ugcopera = 9; ugcparis19 = 37 }
+# mk2 : salle Rétro Projecteur -> complexe (adresse de l'API) + identifiant(s) de salle + page de la salle
+$Mk2Ids = @{
+  mk2beaubourg                = @{ cx = 'mk2-beaubourg'; ids = @('0003'); page = 'mk2-beaubourg' }
+  mk2odeoncotestgermain       = @{ cx = 'mk2-odeon-st-germain-st-michel'; ids = @('0008'); page = 'mk2-odeon-st-germain' }
+  mk2odeoncotestmichel        = @{ cx = 'mk2-odeon-st-germain-st-michel'; ids = @('0009'); page = 'mk2-odeon-st-michel' }
+  mk2parnasse                 = @{ cx = 'mk2-parnasse'; ids = @('0010'); page = 'mk2-parnasse' }
+  mk2bastillecotebeaumarchais = @{ cx = 'mk2-bastille-beaumarchais-fg-st-antoine'; ids = @('0001'); page = 'mk2-bastille-beaumarchais' }
+  mk2bastillecotefgstantoine  = @{ cx = 'mk2-bastille-beaumarchais-fg-st-antoine'; ids = @('0002'); page = 'mk2-bastille-fg-st-antoine' }
+  mk2nation                   = @{ cx = 'mk2-nation'; ids = @('0007'); page = 'mk2-nation' }
+  mk2bibliotheque             = @{ cx = 'mk2-bibliotheque'; ids = @('0004', '0005'); page = 'mk2-bibliotheque' }
+  mk2quaideloire              = @{ cx = 'mk2-quai-seine-quai-loire'; ids = @('0012'); page = 'mk2-quai-loire' }
+  mk2quaideseine              = @{ cx = 'mk2-quai-seine-quai-loire'; ids = @('0011'); page = 'mk2-quai-seine' }
+  mk2gambetta                 = @{ cx = 'mk2-gambetta'; ids = @('0006'); page = 'mk2-gambetta' }
+}
+$bookPath = Join-Path (Split-Path $cachePath -Parent) 'book-cache.json'
+$bookCache = @{}
+if (Test-Path $bookPath) {
+  try { (Get-Content $bookPath -Raw -Encoding UTF8 | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $bookCache[$_.Name] = $_.Value } } catch {}
+}
+$bookTtl = (Get-Date).AddHours(-2).ToString('yyyy-MM-ddTHH:mm:ss')
+$bookDeadline = (Get-Date).AddSeconds(90)
+$parisTz = try { [TimeZoneInfo]::FindSystemTimeZoneById('Europe/Paris') } catch { [TimeZoneInfo]::FindSystemTimeZoneById('Romance Standard Time') }
+$nBookFetch = 0; $nBookErr = 0
+
+# Valeur d'un attribut data-xxx="..." dans une balise HTML
+# UGC écrit data-seanceDate, data-filmId… : comparaison sans tenir compte des majuscules
+function Get-DataAttr([string]$tag, [string]$name) {
+  $x = [regex]::Match($tag, "\bdata-$name=""([^""]*)""", 'IgnoreCase')
+  if ($x.Success) { [Net.WebUtility]::HtmlDecode($x.Groups[1].Value) } else { '' }
+}
+
+# Séances d'une salle UGC pour un jour : [film, filmId, minutes depuis minuit, id de séance]
+function Get-UgcShowings([int]$cid, [string]$iso) {
+  $key = "ugc|$cid|$iso"
+  $c = $bookCache[$key]
+  if ($c -and $c.t -gt $bookTtl) { return , @($c.s) }
+  if ((Get-Date) -gt $bookDeadline) { if ($c) { return , @($c.s) } else { return , @() } }
+  try {
+    $html = Get-Utf8 "https://www.ugc.fr/showingsCinemaAjaxAction!getShowingsForCinemaPage.action?cinemaId=$cid&date=$iso"
+    $script:nBookFetch++
+  } catch { $script:nBookErr++; if ($c) { return , @($c.s) } else { return , @() } }
+  $d = $iso.Split('-'); $frDate = "$($d[2])/$($d[1])/$($d[0])"
+  $list = New-Object System.Collections.ArrayList
+  foreach ($m in [regex]::Matches($html, '<button[^>]*\bdata-showing="(\d+)"[^>]*>')) {
+    $tag = $m.Value
+    if ((Get-DataAttr $tag 'seancedate') -ne $frDate) { continue }
+    $hh = (Get-DataAttr $tag 'seancehour') -split ':'
+    if ($hh.Count -lt 2) { continue }
+    [void]$list.Add([object[]]@((Get-DataAttr $tag 'film'), (Get-DataAttr $tag 'filmid'), ([int]$hh[0] * 60 + [int]$hh[1]), $m.Groups[1].Value))
+  }
+  if (-not $script:ugcDiag) {
+    # Diagnostic (une fois par passage) : ce que renvoie UGC aux serveurs GitHub
+    $script:ugcDiag = $true
+    $ti = [regex]::Match($html, '<title>([^<]*)</title>').Groups[1].Value
+    Write-Host ("UGC salle {0} {1} : {2} octets, {3} séance(s), titre « {4} », début : {5}" -f $cid, $iso, $html.Length, $list.Count, $ti,
+      ($html.Substring(0, [math]::Min(300, $html.Length)) -replace '\s+', ' '))
+  }
+  # Programme vide (page de blocage, jour sans séance) : pas mis en cache, on réessaiera au prochain passage
+  if ($list.Count) { $script:bookCache[$key] = [pscustomobject]@{ t = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss'); s = [object[]]$list } }
+  return , @($list)
+}
+
+# Séances d'un complexe mk2 (tous les jours) : [film, slug, 'salle|aaaa-mm-jj', minutes, id de séance]
+function Get-Mk2Showings([string]$cx) {
+  $key = "mk2|$cx"
+  $c = $bookCache[$key]
+  if ($c -and $c.t -gt $bookTtl) { return , @($c.s) }
+  if ((Get-Date) -gt $bookDeadline) { if ($c) { return , @($c.s) } else { return , @() } }
+  try {
+    $j = (Get-Utf8 "https://prod-paris-cf.api.mk2.com/cinema-complex/$cx/sessions") | ConvertFrom-Json
+    $script:nBookFetch++
+  } catch { $script:nBookErr++; if ($c) { return , @($c.s) } else { return , @() } }
+  $filmsById = @{}
+  foreach ($fm in $j.films) { $filmsById["$($fm.id)"] = $fm }
+  $list = New-Object System.Collections.ArrayList
+  foreach ($se in $j.sessions) {
+    $fm = $filmsById["$($se.filmId)"]
+    if (-not $fm) { continue }
+    $st = $se.showTime
+    # PowerShell 7 convertit déjà les dates ISO du JSON ; Windows PowerShell les laisse en texte
+    $utc = if ($st -is [datetime]) { if ($st.Kind -eq 'Local') { $st.ToUniversalTime() } else { [datetime]::SpecifyKind($st, 'Utc') } }
+           else { [DateTimeOffset]::Parse("$st", [Globalization.CultureInfo]::InvariantCulture).UtcDateTime }
+    $loc = [TimeZoneInfo]::ConvertTimeFromUtc($utc, $parisTz)
+    [void]$list.Add([object[]]@("$($fm.title)", "$($fm.slug)", "$($se.cinemaId)|$($loc.ToString('yyyy-MM-dd'))", ($loc.Hour * 60 + $loc.Minute), "$($se.sessionId)"))
+  }
+  $script:bookCache[$key] = [pscustomobject]@{ t = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss'); s = [object[]]$list }
+  return , @($list)
+}
+
+# Même film ? Titre du cinéma (souvent en capitales, parfois sans le sous-titre) vs titre / titre original RP.
+# Résultats mémorisés : des milliers d'horaires partagent quelques dizaines de titres par salle.
+$tkMemo = @{}; $tbMemo = @{}
+function Get-TitleKeysMemo([string]$s) {
+  if (-not $tkMemo.ContainsKey($s)) { $tkMemo[$s] = Get-TitleKeys $s }
+  $tkMemo[$s]
+}
+function Test-BookTitle([string]$site, $f) {
+  $mk = "$site`n$($f.title)`n$($f.original)"
+  if ($tbMemo.ContainsKey($mk)) { return $tbMemo[$mk] }
+  $ok = $false
+  $k = Get-TitleKeysMemo $site
+  if ($k.Full) {
+    foreach ($tt in @($f.title, $f.original)) {
+      if (-not $tt) { continue }
+      $r = Get-TitleKeysMemo $tt
+      $a = $k.Full; $b = $r.Full
+      if ((Test-SameFilm $k 0 $r 0) -or
+          ($a.Length -ge 4 -and $b.Length -ge 4 -and ($a.StartsWith($b) -or $b.StartsWith($a))) -or
+          # Séance spéciale : "Comment fabrique-t-on l'image d'un film ? avec Les Reines du drame"
+          ($b.Length -ge 8 -and $a.Contains($b))) { $ok = $true; break }
+    }
+  }
+  $tbMemo[$mk] = $ok
+  return $ok
+}
+
+# Programme d'une salle pour un jour, indexé une seule fois : séances par minute + titres (-> lien appli)
+$bookIdx = @{}
+function Get-BookIndex([string]$n, [string]$iso) {
+  $key = "$n|$iso"
+  if ($bookIdx.ContainsKey($key)) { return $bookIdx[$key] }
+  $rows = New-Object System.Collections.ArrayList   # [titre, lien appli, minutes, lien réservation]
+  if ($UgcIds.ContainsKey($n)) {
+    $cid = $UgcIds[$n]
+    foreach ($r in (Get-UgcShowings $cid $iso)) {
+      [void]$rows.Add([object[]]@("$($r[0])", "https://www.ugc.fr/film.html?id=$($r[1])&cinemaId=$cid", [int]$r[2],
+        "https://www.ugc.fr/reservationSeances.html?id=$($r[3])"))
+    }
+  } else {
+    $mk = $Mk2Ids[$n]
+    $want = @{}; foreach ($id in $mk.ids) { $want["$id|$iso"] = $id }
+    foreach ($r in (Get-Mk2Showings $mk.cx)) {
+      if (-not $want.ContainsKey("$($r[2])")) { continue }
+      [void]$rows.Add([object[]]@("$($r[0])", $(if ($r[1]) { "https://www.mk2.com/film/$($r[1])" } else { '' }), [int]$r[3],
+        "https://www.mk2.com/panier/seance/tickets?cinemaId=$($want["$($r[2])"])&sessionId=$($r[4])"))
+    }
+  }
+  $byMin = @{}; $titles = @{}
+  foreach ($r in $rows) {
+    if (-not $byMin.ContainsKey($r[2])) { $byMin[$r[2]] = New-Object System.Collections.ArrayList }
+    [void]$byMin[$r[2]].Add($r)
+    if (-not $titles.ContainsKey($r[0])) { $titles[$r[0]] = $r[1] }
+  }
+  $bookIdx[$key] = @{ byMin = $byMin; titles = $titles }
+  return $bookIdx[$key]
+}
+
+foreach ($f in @($results.Values) + @($others.Values)) {
+  foreach ($s in $f.seances) {
+    $n = Normalize $s.theater
+    if (-not ($UgcIds.ContainsKey($n) -or $Mk2Ids.ContainsKey($n))) { continue }
+    $idx = Get-BookIndex $n $s.date
+    $app = $null
+    foreach ($tt in $idx.titles.Keys) { if ($idx.titles[$tt] -and (Test-BookTitle $tt $f)) { $app = $idx.titles[$tt]; break } }
+    $s.app = if ($app) { $app } elseif ($UgcIds.ContainsKey($n)) { "https://www.ugc.fr/cinema.html?id=$($UgcIds[$n])" } else { "https://www.mk2.com/salle/$($Mk2Ids[$n].page)" }
+    $book = @()
+    foreach ($tm in $s.times) {
+      $m = [int][math]::Round([double]$tm * 60)
+      $cands = @()
+      if ($idx.byMin.ContainsKey($m)) { $cands = $idx.byMin[$m].ToArray() }
+      $hit = $null
+      foreach ($c in $cands) { if (Test-BookTitle $c[0] $f) { $hit = $c; break } }
+      # Titres trop différents (ex. "Irish Travellers" / "Tin Castle") : on accepte la seule séance à cette heure,
+      # sauf si le film est au programme sous son titre (l'horaire du Rétro Projecteur serait alors périmé)
+      if (-not $hit -and $cands.Count -eq 1 -and -not $app) { $hit = $cands[0] }
+      $book += $(if ($hit) { $hit[3] } else { '' })
+    }
+    $s.book = [object[]]$book
+  }
+}
+$o = [ordered]@{}
+$bookKeep = (Get-Date).AddDays(-2).ToString('yyyy-MM-ddTHH:mm:ss')
+foreach ($k in $bookCache.Keys) { if ("$($bookCache[$k].t)" -gt $bookKeep) { $o[$k] = $bookCache[$k] } }
+[IO.File]::WriteAllText($bookPath, ($o | ConvertTo-Json -Depth 5 -Compress), (New-Object Text.UTF8Encoding($false)))
+$bookAll = @(@($results.Values) + @($others.Values) | ForEach-Object { $_.seances } | Where-Object { $_.book })
+$nTimes = [int]($bookAll | ForEach-Object { @($_.book).Count } | Measure-Object -Sum).Sum
+$nOk = [int]($bookAll | ForEach-Object { @($_.book | Where-Object { $_ }).Count } | Measure-Object -Sum).Sum
+$bookMsg = "Réservation UGC/mk2 : $nOk/$nTimes horaires avec lien direct · $nBookFetch programme(s) lus, $nBookErr erreur(s)"
+Write-Host $bookMsg
+if ($env:GITHUB_ACTIONS) { Write-Host "::notice title=Réservation::$bookMsg" }
+
 # --- 4. Un fichier calendrier (.ics) par séance --------------------------------
 # Toucher une séance sur la page ouvre ce fichier : l'iPhone propose alors "Ajouter au calendrier".
 function Esc-Ics([string]$s) { ($s -replace '\\', '\\' -replace ';', '\;' -replace ',', '\,' -replace "`r?`n", '\n') }

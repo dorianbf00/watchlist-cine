@@ -57,8 +57,10 @@ html, body { overscroll-behavior-y: none; }
 #app { position: relative; z-index: 1; background: var(--bg); }
 #app.ptr-live { will-change: transform; }
 /* Le W s'étire DANS le SVG (groupe .logo-shape) : redessiné en vectoriel à chaque image, donc toujours net */
-.logo { overflow: visible; }
-.logo-shape { transform-box: view-box; transform-origin: 50% 100%; }
+/* Réserve de place AU-DESSUS du W dans le SVG (viewBox démarre à -220) : iOS coupe ce qui déborde du SVG.
+   La marge négative annule cette réserve dans la mise en page : le W reste à la même place. */
+.logo { overflow: visible; pointer-events: none; margin-top: calc(-64px * 220 / 96.774); }
+.logo-shape { transform-box: fill-box; transform-origin: 50% 100%; }
 #app.ptr-anim { transition: transform .6s cubic-bezier(.34, 1.5, .64, 1); }
 #app.ptr-anim .logo-shape { transition: transform .6s cubic-bezier(.34, 1.7, .64, 1); }
 #app.ptr-anim .logo { transition: filter .3s; }
@@ -335,7 +337,7 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
 <div id="app">
 <header class="masthead wrap">
   <h1 class="logo-wrap"><span class="sr">Watchlist</span>
-    <svg class="logo" id="logo" aria-hidden="true" viewBox="0 0 96.774 75"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><g class="logo-shape" id="logo-shape"><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></g></svg>
+    <svg class="logo" id="logo" aria-hidden="true" viewBox="0 -220 96.774 295"><defs><linearGradient id="lgLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D5FF00"/><stop offset="1" stop-color="#F6FF00"/></linearGradient><filter id="lgInner" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="b"/><feComposite in="SourceAlpha" in2="b" operator="out" result="e"/><feFlood flood-color="#000" flood-opacity=".25"/><feComposite in2="e" operator="in" result="s"/><feComposite in="s" in2="SourceGraphic" operator="over"/></filter></defs><g class="logo-shape" id="logo-shape"><path d="M 0 0 L 19.354 0 L 19.354 49.596 L 0 49.596 L 0 0 Z M 19.354 49.596 L 38.709 49.596 L 38.709 75 L 19.354 75 L 19.354 49.596 Z M 38.709 0 L 58.064 0 L 58.064 49.596 L 38.709 49.596 L 38.709 0 Z M 58.064 49.596 L 77.419 49.596 L 77.419 75 L 58.064 75 L 58.064 49.596 Z M 77.419 0 L 96.774 0 L 96.774 49.596 L 77.419 49.596 L 77.419 0 Z M 0 49.596 L 19.354 49.596 C 19.354 49.596 19.354 64.717 19.354 57.157 C 19.354 49.596 7.560 49.596 0 49.596 Z M 38.709 42.036 L 38.709 49.596 C 38.709 49.596 23.588 49.596 31.149 49.596 C 38.709 49.596 38.709 49.596 38.709 42.036 Z M 26.915 49.596 L 19.354 49.596 C 19.354 49.596 19.354 34.475 19.354 42.036 C 19.354 49.596 19.354 49.596 26.915 49.596 Z M 38.709 57.157 L 38.709 49.596 C 38.709 49.596 53.830 49.596 46.270 49.596 C 38.709 49.596 38.709 49.596 38.709 57.157 Z M 50.504 49.596 L 58.064 49.596 C 58.064 49.596 58.064 64.717 58.064 57.157 C 58.064 49.596 58.064 49.596 50.504 49.596 Z M 65.625 49.596 L 58.064 49.596 C 58.064 49.596 58.064 34.475 58.064 42.036 C 58.064 49.596 58.064 49.596 65.625 49.596 Z M 77.419 42.036 L 77.419 49.596 C 77.419 49.596 62.298 49.596 69.858 49.596 C 77.419 49.596 77.419 49.596 77.419 42.036 Z M 77.419 57.157 L 77.419 49.596 C 77.419 49.596 104.334 49.596 96.774 49.596 C 89.213 49.596 77.419 49.596 77.419 57.157 Z" fill="url(#lgLime)" filter="url(#lgInner)"/></g></svg>
   </h1>
   <p class="sub" id="sub"></p>
 </header>
@@ -482,7 +484,24 @@ const metaOf = (f) => [f.runtime ? `${f.runtime} min` : null,
 const posterImg = (f) => (f.poster || f.still)
   ? `<img src="${esc(f.poster || f.still)}" alt="" loading="lazy" referrerpolicy="no-referrer" ${f.poster && f.still ? `data-still="${esc(f.still)}"` : ''} onload="this.classList.add('ok')" onerror="if(this.dataset.still){this.src=this.dataset.still;delete this.dataset.still}else{this.remove()}">` : '';
 
-// Salles + horaires (chaque horaire = fichier calendrier) ; au-delà de `max` salles, repliées
+// Un horaire : salle UGC / mk2 -> réservation de cette séance (sinon page du film, qui ouvre l'appli) ;
+// autres salles -> fichier calendrier (l'iPhone propose "Ajouter au calendrier")
+const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+function timeLink(f, s, t, k) {
+  const cls = `t${isPast(s.date, t) ? ' past' : ''}`;
+  if (s.book) {
+    const url = s.book[k] || s.app;
+    const exact = !!s.book[k];
+    return `<a class="${cls} book" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${exact ? 'Réserver' : 'Voir'} ${esc(f.title)} à ${fmtTime(t)} – ${esc(s.theater)}">${ticket}${fmtTime(t)}</a>`;
+  }
+  const ics = `ics/${encodeURIComponent((s.ics || [])[k] || '')}`;
+  // App écran d'accueil : iOS y affiche une page blanche pour un .ics -> on le passe à Safari (x-safari-https://),
+  // qui propose "Ajouter au calendrier"
+  const href = standalone ? 'x-safari-' + new URL(ics, location.href).href : ics;
+  return `<a class="${cls}" href="${esc(href)}"${standalone ? '' : ' target="_blank" rel="noopener"'} aria-label="Ajouter ${esc(f.title)} à ${fmtTime(t)} à mon calendrier">${cal}${fmtTime(t)}</a>`;
+}
+
+// Salles + horaires ; au-delà de `max` salles, repliées
 function theatersHtml(f, seances, max) {
   const nextOf = (s) => Math.min(...s.times.filter((t) => !isPast(s.date, t)), 99);
   const sorted = [...seances].sort((a, b) => nextOf(a) - nextOf(b) || Math.min(...a.times) - Math.min(...b.times));
@@ -490,7 +509,7 @@ function theatersHtml(f, seances, max) {
   return sorted.map((s, i) => `
     <div class="th${i >= max ? ' extra' : ''}" style="--i:${i}">
       <button class="th-name" data-map="${esc(s.theater)}|${esc(s.address || s.zip)}">${esc(s.theater)} (${arr(s.zip)})${s.address ? `<span class="addr">${esc(s.address)}</span>` : ''}</button>
-      <div class="times">${s.times.map((t, k) => `<a class="t${isPast(s.date, t) ? ' past' : ''}" href="ics/${encodeURIComponent((s.ics || [])[k] || '')}" target="_blank" rel="noopener" aria-label="Ajouter ${esc(f.title)} à ${fmtTime(t)} à mon calendrier">${cal}${fmtTime(t)}</a>`).join('')}</div>
+      <div class="times">${s.times.map((t, k) => timeLink(f, s, t, k)).join('')}</div>
     </div>`).join('') + (extra > 0 ? `<button class="more">+ ${extra} autre${extra > 1 ? 's' : ''} salle${extra > 1 ? 's' : ''}</button>` : '');
 }
 
@@ -561,6 +580,7 @@ function toggleDetail(tileEl) {
   d.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
+const ticket = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 7v10" stroke-dasharray="2 2"/></svg>';
 const cal = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="5" width="18" height="16"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>';
 
 // --- Animations -----------------------------------------------------------------
@@ -840,7 +860,7 @@ render();
     if (!active) {
       if (dy < 0 || scrollY > 0) { y0 = null; return; }   // geste vers le haut : défilement normal
       if (dy <= 6) return;
-      active = true; LH = logo.getBoundingClientRect().height || 50;
+      active = true; LH = (logo.getBoundingClientRect().width || 64) * 75 / 96.774;   // hauteur du W seul
       app.classList.remove('ptr-anim'); app.classList.add('ptr-live');
     }
     if (e.cancelable) e.preventDefault();               // on garde la main sur le geste
