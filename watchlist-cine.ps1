@@ -1009,6 +1009,11 @@ $notif = [ordered]@{
   message = if ($films) { $names } else { "Aucun film de ta watchlist ces $Days prochains jours." }
   click   = if ($PageUrl) { $PageUrl } else { 'https://leretroprojecteur.com/' }
 }
-if ($NotifOut) { [IO.File]::WriteAllText($NotifOut, ($notif | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding($false))) }
+if ($NotifOut) {
+  # + tous les films à l'affiche [slug, titre] : le relais en déduit la notif des autres utilisateurs (leur watchlist)
+  $out = [ordered]@{}; foreach ($k in $notif.Keys) { $out[$k] = $notif[$k] }
+  $out.films = [object[]]@(@($results.Values) + @($others.Values) | Where-Object { $_.slug } | ForEach-Object { , [object[]]@($_.slug, $_.title) })
+  [IO.File]::WriteAllText($NotifOut, ($out | ConvertTo-Json -Depth 4 -Compress), (New-Object Text.UTF8Encoding($false)))
+}
 
 if (-not $NoOpen) { Start-Process $outFile }
