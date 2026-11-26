@@ -222,7 +222,7 @@ html.need-user #app { visibility: hidden; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wl-g0: #03030326; --wl-g1: #03030366; --wl-g2: #030303e0; } }
 :root[data-theme="dark"] { --wl-g0: #03030326; --wl-g1: #03030366; --wl-g2: #030303e0; }
 .wl-inner { width: 100%; max-width: 420px; margin: 0 auto; flex: 1; display: flex; flex-direction: column; }
-.welcome .wl-logo { width: 58px; filter: drop-shadow(0 4px 14px #000a); }
+.welcome .wl-logo { width: 40px; filter: drop-shadow(0 4px 14px #000a); }
 .welcome .wl-logo svg { width: 100%; height: auto; display: block; }
 .wl-bottom { margin-top: auto; }
 /* 1. La promesse */
@@ -233,6 +233,10 @@ html.need-user #app { visibility: hidden; }
 .wl-stats div { flex: 1; padding: 9px 0 8px; }
 .wl-stats div + div { border-left: 1px solid var(--line); padding-left: 12px; }
 .wl-stats b { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 26px; line-height: 1; }
+.wl-stats b { display: flex; height: 1em; overflow: hidden; }
+.wl-stats i { display: block; font-style: normal; }
+.wl-stats i > em { display: flex; flex-direction: column; font-style: normal; will-change: transform; }
+.wl-stats i > em > u { text-decoration: none; height: 1em; display: block; }
 .wl-stats span { font-size: 11px; font-weight: 500; text-transform: uppercase; color: var(--gray); }
 /* 3. L'action */
 .welcome label { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; margin-bottom: 8px; }
@@ -943,7 +947,27 @@ function buildStats() {
   const ss = all.flatMap((f) => f.seances.filter((x) => DAYS.includes(x.date)));
   const nF = all.filter((f) => f.seances.some((x) => DAYS.includes(x.date))).length;
   const nS = ss.reduce((n, x) => n + x.times.length, 0), nT = new Set(ss.map((x) => x.theater)).size;
-  $('#wl-stats').innerHTML = [[nF, 'films'], [nS, 'séances'], [nT, 'salles']].map(([n, l]) => `<div><b>${n}</b><span>${l}</span></div>`).join('');
+  // Chaque chiffre = une bande 0-9 répétée 3 fois (roulette) ; on s'arrête toujours sur la vraie valeur
+  const strip = '<em>' + '0123456789'.repeat(3).split('').map((c) => `<u>${c}</u>`).join('') + '</em>';
+  $('#wl-stats').innerHTML = [[nF, 'films'], [nS, 'séances'], [nT, 'salles']].map(([n, l]) =>
+    `<div><b aria-label="${n}">${String(n).split('').map((d) => `<i data-d="${d}">${strip}</i>`).join('')}</b><span>${l}</span></div>`).join('');
+  const spin = (b, delay = 0) => b.querySelectorAll('i').forEach((col, k, all) => {
+    const d = +col.dataset.d, em = col.firstChild;
+    em.style.transition = 'none'; em.style.transform = `translateY(-${d}em)`;
+    void em.offsetHeight;
+    em.style.transition = `transform ${0.9 + (all.length - k) * 0.15}s cubic-bezier(.2, .7, .15, 1) ${delay}s`;
+    em.style.transform = `translateY(-${20 + d}em)`;
+  });
+  const cells = [...$('#wl-stats').querySelectorAll('b')];
+  cells.forEach((b, i) => spin(b, 0.2 + i * 0.15));   // arrivée : les trois roulent
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  // Puis toutes les 2 s, un chiffre au hasard refait un tour de roulette
+  let last = -1;
+  const timer = setInterval(() => {
+    if (welcome.hidden) return clearInterval(timer);
+    let i; do { i = Math.floor(Math.random() * cells.length); } while (i === last && cells.length > 1);
+    last = i; spin(cells[i]);
+  }, 2000);
 }
 $('#wl-form').addEventListener('submit', (e) => {
   e.preventDefault();
