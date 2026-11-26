@@ -147,12 +147,19 @@ $results = [ordered]@{}   # films de la watchlist
 $others = [ordered]@{}    # autres films à l'affiche dans les mêmes salles
 $today = (Get-Date).Date
 $dayList = @()
+# Totaux de Paris sur les 7 jours (toutes les salles 75xxx, sauf le Grand Rex) : chiffres de l'écran de connexion
+$parisFilms = @{}; $parisTheaters = @{}; $parisSeances = 0
 for ($i = 0; $i -lt $Days; $i++) {
   $day = $today.AddDays($i)
   $iso = $day.ToString('yyyy-MM-dd')
   $dayList += $iso
   $movies = (Get-Utf8 "https://leretroprojecteur.com/api/movies/all-by-day/$iso") | ConvertFrom-Json
   foreach ($mv in $movies) {
+    foreach ($th in @($mv.showtimes_theater)) {
+      if ("$($th.zipcode)" -notmatch '^75\d{3}$' -or (Normalize $th.name) -match 'grandrex') { continue }
+      $parisFilms["$($mv.id)"] = 1; $parisTheaters[(Normalize $th.name)] = 1
+      $parisSeances += @($th.seances.PSObject.Properties).Count
+    }
     $mvKeys = @((Get-TitleKeys $mv.title), (Get-TitleKeys $mv.original_title))
     $mvYear = if ($mv.year) { [int]$mv.year } else { 0 }
     $cands = @()
@@ -990,6 +997,7 @@ foreach ($f in @($results.Values) + @($others.Values)) {
 $data = [ordered]@{
   user = $User; generated = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
   days = $dayList; watchlistCount = $watch.Count
+  paris = [ordered]@{ films = $parisFilms.Count; seances = $parisSeances; salles = $parisTheaters.Count }
   films = [object[]]@($results.Values)
   others = [object[]]@($others.Values)
 }

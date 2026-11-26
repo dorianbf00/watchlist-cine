@@ -229,7 +229,8 @@ html.need-user #app { visibility: hidden; }
 .wl-head { margin: 0; font-size: clamp(34px, 10.2vw, 54px); line-height: .92; letter-spacing: -.02em; }
 .wl-head mark { background: var(--lime-grad); color: #030303; padding: 0 .12em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 /* 2. La preuve : chiffres de la semaine */
-.wl-stats { display: flex; gap: 0; margin: 18px 0 26px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.wl-cap { margin: 18px 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--gray); }
+.wl-stats { display: flex; gap: 0; margin: 0 0 26px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .wl-stats div { flex: 1; padding: 9px 0 8px; }
 .wl-stats div + div { border-left: 1px solid var(--line); padding-left: 12px; }
 .wl-stats b { display: block; font-family: var(--display); font-weight: 900; font-stretch: 112%; font-size: 26px; line-height: 1; }
@@ -386,6 +387,7 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
     <div class="wl-logo" id="wl-logo" aria-hidden="true"></div>
     <div class="wl-bottom">
       <h2 class="display wl-head">Ta watchlist<br><mark>au ciné</mark><br>cette semaine</h2>
+      <p class="wl-cap">Les 7 prochains jours à Paris</p>
       <div class="wl-stats" id="wl-stats"></div>
       <form id="wl-form">
         <label for="wl-in">Ton pseudo Letterboxd</label>
@@ -941,12 +943,15 @@ function buildWall() {
   }
   $('#wl-wall').innerHTML = html;
 }
-// Chiffres de la semaine (films / séances / salles) : ce qui attend derrière l'écran
+// Chiffres : films, séances et salles à Paris sur les 7 jours (calculés par le script, toutes salles sauf le Grand Rex)
 function buildStats() {
-  const all = [...(DATA.films || []), ...(DATA.others || [])];
-  const ss = all.flatMap((f) => f.seances.filter((x) => DAYS.includes(x.date)));
-  const nF = all.filter((f) => f.seances.some((x) => DAYS.includes(x.date))).length;
-  const nS = ss.reduce((n, x) => n + x.times.length, 0), nT = new Set(ss.map((x) => x.theater)).size;
+  let { films: nF, seances: nS, salles: nT } = DATA.paris || {};
+  if (nF == null) {   // ancienne page sans ces totaux : salles carte UGC seulement
+    const all = [...(DATA.films || []), ...(DATA.others || [])];
+    const ss = all.flatMap((f) => f.seances.filter((x) => DAYS.includes(x.date)));
+    nF = all.filter((f) => f.seances.some((x) => DAYS.includes(x.date))).length;
+    nS = ss.reduce((n, x) => n + x.times.length, 0); nT = new Set(ss.map((x) => x.theater)).size;
+  }
   // Chaque chiffre = une bande 0-9 répétée 3 fois (roulette) ; on s'arrête toujours sur la vraie valeur
   const strip = '<em>' + '0123456789'.repeat(3).split('').map((c) => `<u>${c}</u>`).join('') + '</em>';
   $('#wl-stats').innerHTML = [[nF, 'films'], [nS, 'séances'], [nT, 'salles']].map(([n, l]) =>
