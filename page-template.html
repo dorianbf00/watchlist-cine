@@ -207,10 +207,12 @@ footer { color: var(--gray); font-size: 12px; text-transform: uppercase; padding
 html.need-user #app { visibility: hidden; }
 /* Fond : mur d'affiches des films à l'affiche cette semaine, rangées inclinées qui défilent en sens alternés.
    C'est l'accroche : on les voit nettement en haut, elles se fondent dans le verre vers le bas. */
-.wl-wall { position: absolute; inset: -15% -45% 15%; display: flex; flex-direction: column; justify-content: flex-start; gap: 10px; transform: rotate(-9deg); pointer-events: none; }
+/* Carré (diagonale de l'écran) centré puis incliné ; les rangées partent de son bord gauche et débordent à droite */
+.wl-wall { position: absolute; left: 50%; top: 50%; width: var(--span, 150vmax); height: var(--span, 150vmax); transform: translate(-50%, -50%) rotate(-9deg);
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 10px; pointer-events: none; }
 .wl-row { display: flex; gap: 10px; width: max-content; animation: wlSlide var(--dur, 80s) linear infinite; }
 .wl-row:nth-child(even) { animation-direction: reverse; }
-.wl-row img { height: 17vh; min-height: 110px; aspect-ratio: 2 / 3; object-fit: cover; background: #1a1a1c; display: block; }
+.wl-row img { height: var(--ph, 17vh); aspect-ratio: 2 / 3; object-fit: cover; background: #1a1a1c; display: block; }
 @keyframes wlSlide { to { transform: translateX(-50%); } }
 @media (prefers-reduced-motion: reduce) { .wl-row { animation: none; } }
 /* Verre liquide plein écran : léger en haut (affiches visibles), opaque en bas (lisibilité du texte) */
@@ -935,15 +937,32 @@ function buildWall() {
   const pics = [...new Set([...(DATA.films || []), ...(DATA.others || [])].map((f) => f.poster || f.still).filter(Boolean))];
   if (!pics.length) return;
   for (let i = pics.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pics[i], pics[j]] = [pics[j], pics[i]]; }
-  const ROWS = 7, per = Math.max(8, Math.ceil(Math.min(pics.length, 60) / ROWS));
-  let html = '';
+  // Assez d'affiches pour couvrir tout l'écran, quelle que soit sa taille (mur incliné = plus large et plus haut que l'écran) ;
+  // chaque rangée est doublée : la 2e moitié prend le relais quand la 1re sort, sans trou
+  const W = innerWidth, H = innerHeight, GAP = 10;
+  const ph = Math.max(110, H * 0.17), pw = ph * 2 / 3 + GAP;
+  const span = Math.hypot(W, H) * 1.15;                    // diagonale : couvre l'écran même incliné
+  const ROWS = Math.ceil(span / (ph + GAP)) + 1;
+  const per = Math.ceil(span / pw) + 2;
+  let html = '', n = 0;
   for (let r = 0; r < ROWS; r++) {
-    const row = Array.from({ length: per }, (_, k) => pics[(r * per + k) % pics.length]);
-    const imgs = row.map((u) => `<img src="${esc(u)}" alt="" loading="eager" decoding="async" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">`).join('');
-    html += `<div class="wl-row" style="--dur:${70 + r * 9}s">${imgs}${imgs}</div>`;
+    const row = Array.from({ length: per }, () => pics[n++ % pics.length]);
+    const imgs = row.map((u) => `<img src="${esc(u)}" alt="" decoding="async" referrerpolicy="no-referrer">`).join('');
+    html += `<div class="wl-row" style="--dur:${Math.round(per * pw / (14 + (r % 3) * 4))}s">${imgs}${imgs}</div>`;
   }
-  $('#wl-wall').innerHTML = html;
+  const wall = $('#wl-wall');
+  wall.style.setProperty('--ph', ph + 'px'); wall.style.setProperty('--span', span + 'px');
+  wall.innerHTML = html;
+  // Affiche introuvable : remplacée par une autre (pas de trou)
+  wall.querySelectorAll('img').forEach((img) => img.addEventListener('error', () => {
+    const alt = pics[Math.floor(Math.random() * pics.length)];
+    if (img.dataset.tries > 2) { img.style.visibility = 'hidden'; return; }
+    img.dataset.tries = (+img.dataset.tries || 0) + 1; img.src = alt;
+  }));
 }
+// Fenêtre redimensionnée (desktop, rotation du téléphone) : on recalcule le mur
+let wallT;
+addEventListener('resize', () => { if (welcome.hidden) return; clearTimeout(wallT); wallT = setTimeout(buildWall, 250); });
 // Chiffres : films, séances et salles à Paris sur les 7 jours (calculés par le script, toutes salles sauf le Grand Rex)
 function buildStats() {
   let { films: nF, seances: nS, salles: nT } = DATA.paris || {};
