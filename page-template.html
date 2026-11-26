@@ -253,20 +253,27 @@ html.need-user #app { visibility: hidden; }
 .welcome .msg { min-height: 18px; margin: 10px 0 0; font-size: 12px; color: var(--gray); }
 .welcome .msg.err { color: var(--red); }
 .welcome .msg .spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid var(--elec-text); border-right-color: transparent; border-radius: 50%; animation: whoSpin .8s linear infinite; vertical-align: -1px; }
+.wl-install { position: absolute; inset: -40px; z-index: 5; display: grid; place-items: center; padding: 40px;
+  background: var(--wl-veil); -webkit-backdrop-filter: blur(8px) saturate(160%); backdrop-filter: blur(8px) saturate(160%);
+  animation: wlFade .35s ease both; }
 .wl-install[hidden] { display: none; }
-.wl-ititle { margin: 0 0 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
-.wl-steps { list-style: none; margin: 0 0 16px; padding: 0; border-top: 1px solid var(--line); counter-reset: st; }
-.wl-steps li { counter-increment: st; display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
-.wl-steps li::before { content: counter(st); flex: none; width: 26px; height: 26px; display: grid; place-items: center; background: var(--lime-grad); color: #030303; font: 900 15px/1 var(--display); font-stretch: 112%; }
+:root { --wl-veil: #ffffff59; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wl-veil: #03030359; } }
+:root[data-theme="dark"] { --wl-veil: #03030359; }
+@keyframes wlFade { from { opacity: 0; } }
+.wl-ibox { width: min(310px, calc(100vw - 48px)); text-align: center; color: var(--ink); }
+.wl-ititle { margin: 0 0 22px; font-size: 22px; line-height: 1; }
+.wl-steps { list-style: none; margin: 0 0 24px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; counter-reset: st; }
+.wl-steps li { counter-increment: st; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 12px; line-height: 1.25; }
+.wl-ico { position: relative; width: 56px; height: 56px; display: grid; place-items: center; color: var(--elec-text);
+  background: var(--bg); box-shadow: 0 6px 20px -8px #0005; }
+.wl-ico::after { content: counter(st); position: absolute; top: -7px; left: -7px; width: 20px; height: 20px; display: grid; place-items: center;
+  background: var(--lime-grad); color: #030303; font: 900 12px/1 var(--display); font-stretch: 112%; }
+.wl-ico svg { width: 26px; height: 26px; }
+.wl-ico img { width: 40px; height: 40px; border-radius: 9px; display: block; }
 .wl-steps b { font-weight: 600; }
-.wl-ico { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--elec-text); background: var(--bg); }
-.wl-ico svg { width: 22px; height: 22px; }
-.wl-ico img { width: 30px; height: 30px; border-radius: 7px; display: block; }
-.wl-install .row { display: flex; border: 1px solid var(--ink); }
-.wl-install .go { flex: 1; }
-.wl-install .later { flex: 1; height: 52px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--ink); }
-.wl-install .go:not([hidden]) + .later { flex: none; padding: 0 16px; border-left: 1px solid var(--ink); font-weight: 500; }
-html.wl-installing #wl-form, html.wl-installing #wl-msg { display: none; }
+.wl-ibox .go { width: 100%; height: 48px; margin-bottom: 8px; }
+.wl-ibox .later { background: none; border: 0; padding: 8px 12px; font-size: 13px; font-weight: 500; color: var(--ink); opacity: .7; text-decoration: underline; text-underline-offset: 3px; }
 .welcome .wl-cancel { align-self: flex-start; margin-top: 10px; border-radius: 0; }
 .welcome .wl-cancel[hidden] { display: none; }
 .foot-who { background: none; border: 0; padding: 0; font-size: inherit; text-transform: inherit; color: var(--elec-text); text-decoration: underline; text-underline-offset: 2px; }
@@ -406,11 +413,6 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
       <h2 class="display wl-head">Ta watchlist<br><mark>au ciné</mark><br>cette semaine</h2>
       <p class="wl-cap">Les 7 prochains jours à Paris</p>
       <div class="wl-stats" id="wl-stats"></div>
-      <div class="wl-install" id="wl-install" hidden>
-        <p class="wl-ititle">Installe l'appli sur ton téléphone</p>
-        <ol class="wl-steps" id="wl-steps"></ol>
-        <div class="row"><button class="go" id="wl-inst-go" type="button" hidden>Installer l'appli</button><button class="later" id="wl-later" type="button">Plus tard, continuer ici</button></div>
-      </div>
       <form id="wl-form">
         <label for="wl-in">Ton pseudo Letterboxd</label>
         <div class="row"><input id="wl-in" placeholder="pseudo" autocomplete="username" autocapitalize="off" spellcheck="false" enterkeyhint="go"><button class="go">Voir mes films</button></div>
@@ -419,6 +421,14 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
       <button class="chip wl-cancel" id="wl-cancel" type="button" hidden>Annuler</button>
     </div>
   </div></div>
+  <div class="wl-install" id="wl-install" hidden role="dialog" aria-labelledby="wl-ititle">
+    <div class="wl-ibox">
+      <p class="wl-ititle display" id="wl-ititle">Ajoute Ciné<br>à ton écran d’accueil</p>
+      <ol class="wl-steps" id="wl-steps"></ol>
+      <button class="go" id="wl-inst-go" type="button" hidden>Installer l’appli</button>
+      <button class="later" id="wl-later" type="button">Plus tard</button>
+    </div>
+  </div>
 </div>
 <div id="app">
 <header class="masthead wrap">
@@ -1036,12 +1046,12 @@ function showInstall() {
     app: '<img src="icon-180.png?v=2" alt="">',
   };
   const steps = isIOS
-    ? [[ico.share, 'Touche <b>Partager</b>'], [ico.add, '<b>Sur l’écran d’accueil</b>, puis <b>Ajouter</b>'], [ico.app, 'Ouvre <b>Ciné</b>']]
-    : [[ico.dots, 'Touche le menu <b>⋮</b>'], [ico.phone, '<b>Ajouter à l’écran d’accueil</b>'], [ico.app, 'Ouvre <b>Ciné</b>']];
+    ? [[ico.share, '<b>Partager</b>'], [ico.add, '<b>Sur l’écran d’accueil</b>'], [ico.app, 'Ouvre <b>Ciné</b>']]
+    : [[ico.dots, 'Menu <b>⋮</b>'], [ico.phone, '<b>Ajouter à l’écran d’accueil</b>'], [ico.app, 'Ouvre <b>Ciné</b>']];
   $('#wl-steps').innerHTML = steps.map(([i, t]) => `<li><span class="wl-ico">${i}</span><span>${t}</span></li>`).join('');
-  $('#wl-install').hidden = false; document.documentElement.classList.add('wl-installing');
+  $('#wl-install').hidden = false;
 }
-function hideInstall() { $('#wl-install').hidden = true; document.documentElement.classList.remove('wl-installing'); }
+function hideInstall() { $('#wl-install').hidden = true; }
 $('#wl-later').addEventListener('click', () => { store.set('installSkip', '1'); hideInstall(); $('#wl-in').focus(); });
 $('#wl-inst-go').addEventListener('click', async () => {
   if (!installEvt) return;
