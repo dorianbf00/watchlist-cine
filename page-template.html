@@ -253,6 +253,27 @@ html.need-user #app { visibility: hidden; }
 .welcome .msg { min-height: 18px; margin: 10px 0 0; font-size: 12px; color: var(--gray); }
 .welcome .msg.err { color: var(--red); }
 .welcome .msg .spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid var(--elec-text); border-right-color: transparent; border-radius: 50%; animation: whoSpin .8s linear infinite; vertical-align: -1px; }
+.wl-install { position: absolute; inset: -40px; z-index: 5; display: grid; place-items: center; padding: 40px;
+  background: var(--wl-veil); -webkit-backdrop-filter: blur(8px) saturate(160%); backdrop-filter: blur(8px) saturate(160%);
+  animation: wlFade .35s ease both; }
+.wl-install[hidden] { display: none; }
+:root { --wl-veil: #ffffff59; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wl-veil: #03030359; } }
+:root[data-theme="dark"] { --wl-veil: #03030359; }
+@keyframes wlFade { from { opacity: 0; } }
+.wl-ibox { width: min(310px, calc(100vw - 48px)); text-align: center; color: var(--ink); }
+.wl-ititle { margin: 0 0 22px; font-size: 22px; line-height: 1; }
+.wl-steps { list-style: none; margin: 0 0 24px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; counter-reset: st; }
+.wl-steps li { counter-increment: st; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 12px; line-height: 1.25; }
+.wl-ico { position: relative; width: 56px; height: 56px; display: grid; place-items: center; color: var(--elec-text);
+  background: var(--bg); box-shadow: 0 6px 20px -8px #0005; }
+.wl-ico::after { content: counter(st); position: absolute; top: -7px; left: -7px; width: 20px; height: 20px; display: grid; place-items: center;
+  background: var(--lime-grad); color: #030303; font: 900 12px/1 var(--display); font-stretch: 112%; }
+.wl-ico svg { width: 26px; height: 26px; }
+.wl-ico img { width: 40px; height: 40px; border-radius: 9px; display: block; }
+.wl-steps b { font-weight: 600; }
+.wl-ibox .go { width: 100%; height: 48px; margin-bottom: 8px; }
+.wl-ibox .later { background: none; border: 0; padding: 8px 12px; font-size: 13px; font-weight: 500; color: var(--ink); opacity: .7; text-decoration: underline; text-underline-offset: 3px; }
 .welcome .wl-cancel { align-self: flex-start; margin-top: 10px; border-radius: 0; }
 .welcome .wl-cancel[hidden] { display: none; }
 .foot-who { background: none; border: 0; padding: 0; font-size: inherit; text-transform: inherit; color: var(--elec-text); text-decoration: underline; text-underline-offset: 2px; }
@@ -400,6 +421,14 @@ html.sheet-open .fsheet { transform: translateY(var(--drag, 0px)); visibility: v
       <button class="chip wl-cancel" id="wl-cancel" type="button" hidden>Annuler</button>
     </div>
   </div></div>
+  <div class="wl-install" id="wl-install" hidden role="dialog" aria-labelledby="wl-ititle">
+    <div class="wl-ibox">
+      <p class="wl-ititle display" id="wl-ititle">Ajoute Ciné<br>à ton écran d’accueil</p>
+      <ol class="wl-steps" id="wl-steps"></ol>
+      <button class="go" id="wl-inst-go" type="button" hidden>Installer l’appli</button>
+      <button class="later" id="wl-later" type="button">Plus tard</button>
+    </div>
+  </div>
 </div>
 <div id="app">
 <header class="masthead wrap">
@@ -1000,7 +1029,42 @@ $('#wl-form').addEventListener('submit', (e) => {
   if (!u) { showWelcome('Pseudo invalide : celui de ton profil, letterboxd.com/<b>pseudo</b>', 'err'); return; }
   useUser(u);
 });
-if (!CHOSEN) { showWelcome(); setTimeout(() => $('#wl-in').focus(), 50); }
+// Tuto « écran d'accueil » : au 1er lancement, sur téléphone, dans le navigateur (pas dans l'appli installée).
+// Il passe AVANT le pseudo : sur iPhone, l'appli installée ne partage pas la mémoire de Safari.
+const isAndroid = /Android/i.test(navigator.userAgent);
+const installed = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+let installEvt = null;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('#wl-inst-go').hidden = false; });
+function showInstall() {
+  // Icônes telles qu'elles apparaissent sur le téléphone
+  const svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const ico = {
+    share: svg('<path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M8 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2"/>'),
+    add: svg('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M12 8v8M8 12h8"/>'),
+    dots: svg('<circle cx="12" cy="5" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/>'),
+    phone: svg('<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3M12 7v6M9.5 10.5 12 13l2.5-2.5"/>'),
+    app: '<img src="icon-180.png?v=2" alt="">',
+  };
+  const steps = isIOS
+    ? [[ico.share, '<b>Partager</b>'], [ico.add, '<b>Sur l’écran d’accueil</b>'], [ico.app, 'Ouvre <b>Ciné</b>']]
+    : [[ico.dots, 'Menu <b>⋮</b>'], [ico.phone, '<b>Ajouter à l’écran d’accueil</b>'], [ico.app, 'Ouvre <b>Ciné</b>']];
+  $('#wl-steps').innerHTML = steps.map(([i, t]) => `<li><span class="wl-ico">${i}</span><span>${t}</span></li>`).join('');
+  $('#wl-install').hidden = false;
+}
+function hideInstall() { $('#wl-install').hidden = true; }
+$('#wl-later').addEventListener('click', () => { store.set('installSkip', '1'); hideInstall(); $('#wl-in').focus(); });
+$('#wl-inst-go').addEventListener('click', async () => {
+  if (!installEvt) return;
+  installEvt.prompt();
+  const { outcome } = await installEvt.userChoice.catch(() => ({}));
+  installEvt = null; $('#wl-inst-go').hidden = true;
+  if (outcome === 'accepted') $('#wl-steps').innerHTML = '<li><span>C’est installé : ouvre <b>Ciné</b> depuis ton écran d’accueil</span></li>';
+});
+if (!CHOSEN) {
+  showWelcome();
+  if ((isIOS || isAndroid) && !installed && !store.get('installSkip')) showInstall();
+  else setTimeout(() => $('#wl-in').focus(), 50);
+}
 document.addEventListener('click', (e) => {
   if (e.target.closest('#foot-who')) { $('#wl-in').value = ''; showWelcome('Pseudo Letterboxd de la watchlist à afficher', ''); $('#wl-cancel').hidden = false; $('#wl-in').focus(); }
 });
